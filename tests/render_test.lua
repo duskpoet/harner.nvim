@@ -134,6 +134,7 @@ c.run = nil
 -- 5. gf on a file reference opens it in the editor window
 local file = vim.fn.tempname() .. ".lua"
 vim.fn.writefile({ "one", "two", "three" }, file)
+file = vim.uv.fs_realpath(file) -- macOS: the temp dir is behind the /var symlink
 vim.cmd("enew")
 local editor = vim.api.nvim_get_current_win()
 chat.open()

@@ -151,7 +151,8 @@ for i = 1, 3 do
 end
 check(not edit(1).isError and not edit(2).isError, "edits with a clean target")
 check(normal_wins() == 1, "no split when nothing of the user's is unsaved")
-check(vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf()) == files[2], "last edited file shown")
+-- realpath: on macOS the temp dir is behind the /var symlink
+check(vim.uv.fs_realpath(vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())) == vim.uv.fs_realpath(files[2]), "last edited file shown")
 local a = vim.fn.bufnr(files[1])
 check(a > 0 and vim.bo[a].modified and vim.bo[a].buflisted, "earlier edited buffer is hidden, still listed and modified")
 

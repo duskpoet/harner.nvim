@@ -75,7 +75,7 @@ vim.fn.writefile({
   "#!/bin/sh",
   "cat >/dev/null",
   'printf "%s\\n" "$@" > ' .. out .. ".args",
-  'prev=""; for a in "$@"; do if [ "$prev" = "--mcp-config" ]; then cp "$a" ' .. out .. '.json; stat -c %a "$a" > ' .. out .. '.mode; echo "$a" > ' .. out .. ".path; fi; prev=\"$a\"; done",
+  'prev=""; for a in "$@"; do if [ "$prev" = "--mcp-config" ]; then cp "$a" ' .. out .. '.json; { stat -c %a "$a" 2>/dev/null || stat -f %Lp "$a"; } > ' .. out .. '.mode; echo "$a" > ' .. out .. ".path; fi; prev=\"$a\"; done",
   "echo '" .. vim.json.encode(events[#events]) .. "'",
 }, spy)
 vim.fn.setfperm(spy, "rwxr-xr-x")
