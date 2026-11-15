@@ -1,13 +1,16 @@
-# harner
+# harner.nvim
+
+The repo is `duskpoet/harner.nvim`; the Lua module, commands and everything
+user-facing inside the editor stay `harner` (`require("harner")`).
 
 Neovim plugin (Lua, requires nvim 0.10+, developed on 0.12) that chats with
 `claude -p` from a vertical split. Claude gets an MCP server that reads the
 editor and displays content back in it. Standard plugin layout
 (`lua/harner/*.lua`, `tests/`, `README.md`) installed with lazy.nvim: `opts =
 {}` calls `setup()`, which registers the commands and the global keymaps. The
-user installs it from GitHub as `duskpoet/harner`, so the working copy is
-lazy.nvim's checkout at `~/.local/share/nvim/lazy/harner/`. The spec in
-`~/.config/nvim/lua/plugins.lua` is `{ 'duskpoet/harner', event = "VeryLazy",
+user installs it from GitHub as `duskpoet/harner.nvim`, so the working copy is
+lazy.nvim's checkout at `~/.local/share/nvim/lazy/harner.nvim/`. The spec in
+`~/.config/nvim/lua/plugins.lua` is `{ 'duskpoet/harner.nvim', event = "VeryLazy",
 opts = {} }`; without `opts` lazy never calls `setup()` and no commands or
 keys exist.
 

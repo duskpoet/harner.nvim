@@ -1,22 +1,58 @@
-# harner
+# harner.nvim
 
-Chat with `claude -p` from a Neovim split. Claude gets an MCP server that
-reads the editor (buffer, cursor, selection, diagnostics) and displays
-content back in it (scratch windows, jump to file and line, buffer edits
-that stay unsaved until you review them).
+Chat with [Claude Code](https://docs.claude.com/en/docs/claude-code) from a
+Neovim split, with Claude working *inside your editor* instead of next to it.
 
-harner is the headless path only: every request is one `claude -p` call
-that resumes the same session. For the interactive Claude Code terminal use
-[coder/claudecode.nvim](https://github.com/coder/claudecode.nvim).
+harner runs the `claude` CLI headless (`claude -p`) and gives it an MCP
+server that talks to the Neovim you are sitting in. Claude can then:
+
+- **see what you see**: the current buffer, cursor, visual selection, open
+  buffers and LSP diagnostics, so "explain this" or "fix the error here"
+  needs no copy-pasting;
+- **show you things**: jump your window to a file and highlight the lines it
+  is talking about, or open long output (diffs, tables, generated code) in a
+  scratch window;
+- **edit your buffers**: changes land in the buffer unsaved, so you review
+  them with your usual tools and undo with `u`;
+- **ask you**: questions with choices, and a confirm float before it runs an
+  Ex command or a shell command.
+
+There is no terminal emulator in between: the transcript is a markdown
+buffer (boxed tables, shaded code, `gf` on `file.lua:12` references and
+URLs), prompts are typed in a small popup, and every chat keeps its own
+Claude session with your `CLAUDE.md`, skills and MCP connectors.
+
+If you want the interactive Claude Code TUI inside Neovim instead, use
+[coder/claudecode.nvim](https://github.com/coder/claudecode.nvim); the two
+work side by side.
+
+## Contents
+
+- [Requirements](#requirements)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [What Claude can do in the editor](#what-claude-can-do-in-the-editor)
+- [Confirms and auto mode](#confirms-and-auto-mode)
+- [Security](#security)
+- [Configuration](#configuration)
+- [Extra MCP servers](#extra-mcp-servers)
+- [Highlight groups](#highlight-groups)
+- [Troubleshooting](#troubleshooting)
+- [How it works](#how-it-works)
+- [Development](#development)
 
 ## Requirements
 
 - Neovim 0.10 or newer
 - the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) on
-  `PATH` as `claude` (or set `claude_cmd`), logged in
-- optional: [which-key.nvim](https://github.com/folke/which-key.nvim) for
-  the `<leader>h` group label, a `vim.ui.select` frontend such as
-  telescope-ui-select for nicer confirm prompts
+  `PATH` as `claude` (or set `claude_cmd`), logged in: run `claude` once in
+  a terminal first. Requests are billed to that account like any other
+  Claude Code use
+- optional: the treesitter `markdown` and `markdown_inline` parsers for
+  transcript colours and concealed markup,
+  [which-key.nvim](https://github.com/folke/which-key.nvim) for the
+  `<leader>h` group label
 
 ## Install
 
@@ -24,23 +60,40 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  "<github-user>/harner",
+  "duskpoet/harner.nvim",
   event = "VeryLazy",
   opts = {},
 }
 ```
 
-`opts` is passed to `require("harner").setup()`. To lazy-load on first use
-instead, list the commands and keys in the spec:
+`opts` is passed to `require("harner").setup()`; without `opts` (or
+`config`) lazy.nvim never calls `setup()` and no commands or keys exist. To
+load on first use instead, list the commands and keys in the spec:
 
 ```lua
 {
-  "<github-user>/harner",
-  cmd = { "Harner", "HarnerAsk", "HarnerNew", "HarnerCancel", "HarnerAuto" },
+  "duskpoet/harner.nvim",
+  cmd = { "Harner", "HarnerAsk", "HarnerNew", "HarnerChats", "HarnerCancel", "HarnerAuto", "HarnerDecisions" },
   keys = { "<leader>hh", { "<leader>hh", mode = "x" }, "<leader>ht", "<leader>hn", "<leader>hl", "<leader>hx", "<leader>ha" },
   opts = {},
 }
 ```
+
+With any other plugin manager, add the repository and call
+`require("harner").setup({})` yourself.
+
+## Quick start
+
+1. Open a file and press `<leader>hh`. Type a question in the popup, e.g.
+   `what does this file do?`, and press `<CR>`.
+2. The chat split opens on the right and the answer streams in. Lines like
+   `→ nvim:get_current_buffer` show which tools Claude used.
+3. Select some lines in visual mode, press `<leader>hh` and ask
+   `simplify this`. Claude reads the selection, edits the buffer and moves
+   your window to the change. Review it, then `:w` to keep it or `u` to
+   undo.
+4. Keep asking with `<leader>hh` (same conversation), or press `<leader>hn`
+   for a fresh one.
 
 ## Usage
 
@@ -53,22 +106,32 @@ instead, list the commands and keys in the spec:
 | `<leader>hx` / `:HarnerCancel` | cancel the running request (the current chat's, else the only running one) |
 | `<leader>ha` / `:HarnerAuto` | toggle auto mode (fewer confirms) for the current chat         |
 | `:HarnerAsk [text]`      | send text directly, or open the popup when called bare; `:'<,'>HarnerAsk` attaches the range |
+| `:HarnerDecisions`       | summary of what was confirmed, declined or run unasked             |
 
-In the popup `<CR>` sends, `<S-CR>` or `<C-CR>` inserts a newline, `<Esc>`
-closes and keeps the text as a draft. In the chat split everything below the
-last `────` line is your next message: `<CR>` in normal mode or `<C-s>` in
-insert mode sends it, `<C-c>` cancels a run.
+The keys are configurable (`keys`, any entry `false` disables it).
 
-A selection is passed by reference, not pasted: the prompt ends with a
-`Selection: <path> lines N-M` line and Claude reads the lines itself with
-`get_selection`.
+**The popup.** `<CR>` sends, `<S-CR>` or `<C-CR>` inserts a newline, `<Esc>`
+closes and keeps the text as a draft for the next open. Sending while Claude
+is still answering queues the message; it goes out when the current reply
+ends (the winbar shows `N queued`).
 
-Chats live until nvim exits. Closing the split, `:bdelete` or `:bwipeout` on
-a chat buffer only hides it; `<leader>hl` brings it back with the same
-transcript and Claude session. Several chats can run at once; each one's
-tools act on the window it was asked from.
+**The chat split.** Everything below the last `────` line is your next
+message: `<CR>` in normal mode or `<C-s>` in insert mode sends it, `<C-c>`
+cancels a run. `gf` on a URL or a `path/file.lua:12-20` reference opens it.
+The winbar shows the state (`thinking…`, `running Grep`, `idle`), the cost
+of the last reply, how full the context window is (`ctx 42k/200k 21%`) and
+the `AUTO` badge.
 
-### What Claude can do in the editor
+**Selections.** A selection is passed by reference, not pasted: the prompt
+ends with a `Selection: <path> lines N-M` line and Claude reads the lines
+itself with `get_selection`.
+
+**Several chats.** Chats live until nvim exits. Closing the split,
+`:bdelete` or `:bwipeout` on a chat buffer only hides it; `<leader>hl`
+brings it back with the same transcript and Claude session. Several chats
+can run at once; each one's tools act on the window it was asked from.
+
+## What Claude can do in the editor
 
 - read: `get_current_buffer`, `get_cursor`, `get_selection`, `list_buffers`,
   `get_diagnostics`
@@ -96,6 +159,12 @@ tools act on the window it was asked from.
   shell-dependent skills such as a PR review need. With the tool off, Claude
   is told to say up front when a task needs a shell instead of stopping
   partway through.
+
+Next to these, Claude has its built-in read-only tools (`Read`, `Grep`,
+`Glob`, `WebFetch`) and nothing else: no built-in shell and no direct file
+write.
+
+## Confirms and auto mode
 
 Commands and the disk writes that ask are confirmed in a small float that
 shows the full command or file list: `y` approves, `a` approves and stops asking for the rest
@@ -145,19 +214,28 @@ to `decisions.path` (default `stdpath("state")/harner/decisions.jsonl`).
 `:HarnerDecisions` summarises it by tool and command, so you can see what
 still asks and add `auto.allow` entries for it.
 
-The confirm float has its own highlight groups so it stands out from the
-code behind it: `HarnerConfirmBorder`, `HarnerConfirmTitle` and
-`HarnerConfirmKey` (the keys in the footer) link to `DiagnosticInfo` by
-default, `HarnerConfirmFooter` to `Comment` and `HarnerConfirmNormal` (the
-body) to `NormalFloat`. Override any of them with `nvim_set_hl`, e.g. give
-`HarnerConfirmNormal` a distinct background if your `NormalFloat` matches
-`Normal`.
+## Security
 
 Headless Claude silently denies anything not pre-approved. harner restricts
 the built-in tools to `Read`, `Grep`, `Glob`, `WebFetch` and `ToolSearch` and
 approves the `nvim` MCP server, so there is no built-in shell and no direct file write;
 all changes go through the tools above (shell commands only through the
 confirmed `bash` tool, when you enable it).
+
+Things to know before you rely on that:
+
+- Claude can read any file your user can (`Read` is not limited to the
+  working directory) and fetch URLs.
+- By default, writes inside the working directory are not confirmed
+  (`write_file.confirm = false`); set it to `true` and turn auto mode off
+  if you want to approve each one.
+- Auto mode is a convenience, not a sandbox: its classifier is a model and
+  can be wrong. Set `auto = { enabled = false }` to confirm every command.
+- `claude -p` has no trust prompt for the project. harner denies the MCP
+  servers of project `.mcp.json` files, but a project's
+  `.claude/settings.json` is still read: its `permissions.allow` can
+  pre-approve tools and its `hooks` run commands. **Only chat in
+  repositories you trust**, as you would with `claude` itself.
 
 ## Configuration
 
@@ -234,7 +312,7 @@ require("harner").setup({
 })
 ```
 
-### Extra MCP servers
+## Extra MCP servers
 
 Claude loads every MCP server it knows about: claude.ai connectors, servers
 added with `claude mcp add`, plugin servers. harner approves only `nvim` and
@@ -278,6 +356,38 @@ must match the one you logged in with (`claude mcp list` shows it). The
 generated config file can contain API keys: it is written `0600` and deleted
 when the run ends.
 
+## Highlight groups
+
+All groups are defined with `default = true`, so a colorscheme or your own
+`nvim_set_hl` wins.
+
+| group | default link | used for |
+| ----- | ------------ | -------- |
+| `HarnerWinBar`, `HarnerWinBarNC` | `StatusLine`, `StatusLineNC` | chat winbar |
+| `HarnerConfirmBorder`, `HarnerConfirmTitle`, `HarnerConfirmKey` | `DiagnosticInfo` | confirm float border, title, keys in the footer |
+| `HarnerConfirmFooter` | `Comment` | confirm float footer text |
+| `HarnerConfirmNormal` | `NormalFloat` | confirm float body |
+
+The transcript uses `HarnerCodeBlock`, `HarnerCodeLang`, `HarnerToolNote`,
+`HarnerSeparator`, `HarnerError`, `HarnerTableBorder`, `HarnerTableHead`,
+`HarnerUrl` and `HarnerFileRef`. If your `NormalFloat` matches `Normal`,
+give `HarnerConfirmNormal` a distinct background so confirms stand out.
+
+## Troubleshooting
+
+- **No `:Harner` command or keys.** `setup()` was not called: the lazy.nvim
+  spec needs `opts = {}`.
+- **"`claude` not found on PATH" in the chat.** The CLI is not on the `PATH` Neovim
+  sees; set `claude_cmd` to its full path.
+- **Authentication errors.** Run `claude` in a terminal and log in; harner
+  uses the same credentials.
+- **Claude says a task needs a shell.** Enable the opt-in tool with
+  `bash = { enabled = true }`.
+- **A connector's tools are denied.** Only servers listed in `mcp_servers`
+  or `connectors` are approved, see [Extra MCP servers](#extra-mcp-servers).
+- **Tables or markup look raw.** Install the `markdown` and
+  `markdown_inline` treesitter parsers, or check `render` in the config.
+
 ## How it works
 
 ```
@@ -301,11 +411,19 @@ Offline tests, run from the repo root; each ends with `ALL OK`:
 
 ```sh
 nvim --headless -u NONE -l tests/bridge_test.lua   # MCP round trip, every tool
+nvim --headless -u NONE -l tests/chats_test.lua    # several chats, wiped buffers, routing
 nvim --headless -u NONE -l tests/prompt_test.lua   # popup and keymaps
+nvim --headless -u NONE -l tests/render_test.lua   # tables, code shading, refs, gf
+nvim --headless -u NONE -l tests/title_test.lua    # terminal title
 nvim --headless -u NONE -l tests/confirm_test.lua  # confirm float, grants, window reuse
-nvim --headless -u NONE -l tests/runner_test.lua   # stream parsing against a fake claude
 nvim --headless -u NONE -l tests/bash_test.lua     # opt-in shell tool, allow-list, timeout, cancel
-nvim --headless -u NONE -l tests/chat_test.lua     # real CLI, costs money
+nvim --headless -u NONE -l tests/auto_test.lua     # auto mode rules and classifier
+nvim --headless -u NONE -l tests/runner_test.lua   # stream parsing against a fake claude
 ```
 
-Design notes and gotchas are in `CLAUDE.md`.
+`tests/chat_test.lua` runs the full loop against the real CLI (about two
+minutes, costs money). Design notes and gotchas are in `CLAUDE.md`.
+
+## License
+
+[MIT](LICENSE)
