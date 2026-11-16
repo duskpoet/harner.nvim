@@ -73,8 +73,8 @@ load on first use instead, list the commands and keys in the spec:
 ```lua
 {
   "duskpoet/harner.nvim",
-  cmd = { "Harner", "HarnerAsk", "HarnerNew", "HarnerChats", "HarnerCancel", "HarnerAuto", "HarnerDecisions" },
-  keys = { "<leader>hh", { "<leader>hh", mode = "x" }, "<leader>ht", "<leader>hn", "<leader>hl", "<leader>hx", "<leader>ha" },
+  cmd = { "Harner", "HarnerAsk", "HarnerNew", "HarnerChats", "HarnerCancel", "HarnerAuto", "HarnerMinimize", "HarnerDecisions" },
+  keys = { "<leader>hh", { "<leader>hh", mode = "x" }, "<leader>ht", "<leader>hn", "<leader>hl", "<leader>hx", "<leader>ha", "<leader>hm" },
   opts = {},
 }
 ```
@@ -105,6 +105,7 @@ With any other plugin manager, add the repository and call
 | `<leader>hl` / `:HarnerChats` | pick one of this nvim's chats to show                         |
 | `<leader>hx` / `:HarnerCancel` | cancel the running request (the current chat's, else the only running one) |
 | `<leader>ha` / `:HarnerAuto` | toggle auto mode (fewer confirms) for the current chat         |
+| `<leader>hm` / `:HarnerMinimize` | minimize / restore the open confirm float (`m` inside it), to read what it covers before answering |
 | `:HarnerAsk [text]`      | send text directly, or open the popup when called bare; `:'<,'>HarnerAsk` attaches the range |
 | `:HarnerDecisions`       | summary of what was confirmed, declined or run unasked             |
 
@@ -301,6 +302,7 @@ require("harner").setup({
     cancel = "<leader>hx",
     auto = "<leader>ha",
     list = "<leader>hl",
+    minimize = "<leader>hm",
   },
   prompt = {
     width = 0.6,

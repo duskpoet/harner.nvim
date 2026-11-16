@@ -31,6 +31,153 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 	callback = set_highlights,
 })
 
+-- Minimizing: the float covers the chat and the code the question is about,
+-- and leaving it declines. `m` (or config.keys.minimize from anywhere) hides
+-- it without answering, leaving a one-line chip in the top right corner; the
+-- global key brings it back. One float is open at a time (tools.lua queues
+-- them), so `current` is the one the global key acts on.
+---@class HarnerConfirmState
+---@field win integer
+---@field prev integer window focus returns to
+---@field title string
+---@field insert boolean|nil restore in insert mode (the free-text float)
+---@field minimized boolean|nil
+---@field chip integer|nil
+local current ---@type HarnerConfirmState|nil
+
+---@param st HarnerConfirmState
+local function close_chip(st)
+	if st.chip and vim.api.nvim_win_is_valid(st.chip) then
+		pcall(vim.api.nvim_win_close, st.chip, true)
+	end
+	st.chip = nil
+end
+
+---@param st HarnerConfirmState
+local function minimize(st)
+	if st.minimized or not vim.api.nvim_win_is_valid(st.win) then
+		return
+	end
+	st.minimized = true -- before leaving: WinLeave must not decline
+	if vim.api.nvim_get_current_win() == st.win then
+		vim.cmd("stopinsert")
+		local to = st.prev
+		if not vim.api.nvim_win_is_valid(to) then
+			for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+				if vim.api.nvim_win_get_config(w).relative == "" then
+					to = w
+					break
+				end
+			end
+		end
+		pcall(vim.api.nvim_set_current_win, to)
+	end
+	vim.api.nvim_win_set_config(st.win, { hide = true, focusable = false })
+
+	local key = (require("harner").config.keys or {}).minimize
+	local text = string.format(" ▸ %s · %s restore ", st.title, key and key ~= "" and key or ":HarnerMinimize")
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.bo[buf].bufhidden = "wipe"
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
+	local width = math.min(vim.fn.strdisplaywidth(text), vim.o.columns)
+	st.chip = vim.api.nvim_open_win(buf, false, {
+		relative = "editor",
+		row = 0,
+		col = vim.o.columns - width,
+		width = width,
+		height = 1,
+		style = "minimal",
+		focusable = false,
+		noautocmd = true,
+		zindex = 60,
+	})
+	vim.wo[st.chip].winhighlight = "NormalFloat:HarnerConfirmTitle"
+end
+
+---@param st HarnerConfirmState
+local function restore(st)
+	if not st.minimized or not vim.api.nvim_win_is_valid(st.win) then
+		return
+	end
+	close_chip(st)
+	st.prev = vim.api.nvim_get_current_win()
+	vim.api.nvim_win_set_config(st.win, { hide = false, focusable = true })
+	vim.api.nvim_set_current_win(st.win)
+	st.minimized = false
+	if st.insert then
+		vim.cmd("startinsert!")
+	end
+end
+
+---Shared end of both floats' close(): drop the chip, close the window and
+---give focus back, unless the float was minimized (the user is elsewhere).
+---@param st HarnerConfirmState
+local function dismiss(st)
+	local was_minimized = st.minimized
+	close_chip(st)
+	if current == st then
+		current = nil
+	end
+	if vim.api.nvim_win_is_valid(st.win) then
+		if vim.api.nvim_get_current_win() == st.win then
+			vim.cmd("stopinsert")
+		end
+		vim.api.nvim_win_close(st.win, true)
+	end
+	if not was_minimized and vim.api.nvim_win_is_valid(st.prev) and vim.api.nvim_get_current_win() ~= st.prev then
+		pcall(vim.api.nvim_set_current_win, st.prev)
+	end
+end
+
+---Register a float: `m` minimizes it, leaving it any other way calls `leave`.
+---@param st HarnerConfirmState
+---@param buf integer
+---@param leave fun()
+local function track(st, buf, leave)
+	current = st
+	vim.keymap.set("n", "m", function()
+		minimize(st)
+	end, { buffer = buf, nowait = true })
+	vim.api.nvim_create_autocmd("WinLeave", {
+		buffer = buf,
+		callback = function()
+			if st.minimized then
+				return
+			end
+			vim.schedule(function()
+				if not st.minimized then
+					leave()
+				end
+			end)
+		end,
+	})
+	-- a minimized float is not current, so closing it from outside (:only,
+	-- :fclose!, :tabclose) fires no WinLeave; without this the call would
+	-- wait for an answer nobody can give. No-op after a normal close.
+	vim.api.nvim_create_autocmd("WinClosed", {
+		pattern = tostring(st.win),
+		once = true,
+		callback = function()
+			vim.schedule(leave)
+		end,
+	})
+end
+
+---Minimize the open confirm float, or restore the minimized one.
+---@return boolean acted false when no confirm is waiting
+function M.toggle()
+	local st = current
+	if not st or not vim.api.nvim_win_is_valid(st.win) then
+		return false
+	end
+	if st.minimized then
+		restore(st)
+	else
+		minimize(st)
+	end
+	return true
+end
+
 ---Answer keys a confirm offers besides `n` (decline) and the item digits:
 ---y (yes), a (always), then `opts.choices`.
 ---@param opts HarnerConfirmOpts
@@ -103,6 +250,7 @@ function M.ask(opts, cb)
 		add_key("<CR>", "pick line")
 	end
 	add_key("n", "skip")
+	add_key("m", "minimize")
 	footer[#footer + 1] = { " ", "HarnerConfirmFooter" }
 	local footer_text = table.concat(vim.tbl_map(function(c)
 		return c[1]
@@ -146,20 +294,19 @@ function M.ask(opts, cb)
 		vim.api.nvim_win_set_cursor(win, { first_item, 0 })
 	end
 
+	local st = { win = win, prev = prev, title = opts.title }
 	local done = false
 	local function close(choice, index)
 		if done then
 			return
 		end
 		done = true
-		if vim.api.nvim_win_is_valid(win) then
-			vim.api.nvim_win_close(win, true)
-		end
-		if vim.api.nvim_win_is_valid(prev) and vim.api.nvim_get_current_win() ~= prev then
-			pcall(vim.api.nvim_set_current_win, prev)
-		end
+		dismiss(st)
 		cb(choice, index)
 	end
+	track(st, buf, function()
+		close("no")
+	end)
 
 	local function map(lhs, choice)
 		vim.keymap.set("n", lhs, function()
@@ -190,15 +337,6 @@ function M.ask(opts, cb)
 	for _, lhs in ipairs({ "n", "q", "<Esc>", "<C-c>" }) do
 		map(lhs, "no")
 	end
-	vim.api.nvim_create_autocmd("WinLeave", {
-		buffer = buf,
-		once = true,
-		callback = function()
-			vim.schedule(function()
-				close("no")
-			end)
-		end,
-	})
 	return close
 end
 
@@ -230,7 +368,9 @@ function M.input(opts, cb)
 		{ "<C-s>", "HarnerConfirmKey" },
 		{ " send · ", "HarnerConfirmFooter" },
 		{ "q", "HarnerConfirmKey" },
-		{ " skip ", "HarnerConfirmFooter" },
+		{ " skip · ", "HarnerConfirmFooter" },
+		{ "m", "HarnerConfirmKey" },
+		{ " minimize ", "HarnerConfirmFooter" },
 	}
 	local longest = vim.fn.strdisplaywidth(opts.title) + 4
 	for _, l in ipairs(opts.body) do
@@ -274,23 +414,19 @@ function M.input(opts, cb)
 		return vim.trim(table.concat(all, "\n"))
 	end
 
+	local st = { win = win, prev = prev, title = opts.title, insert = true }
 	local done = false
 	local function close(choice, text)
 		if done then
 			return
 		end
 		done = true
-		if vim.api.nvim_win_is_valid(win) then
-			if vim.api.nvim_get_current_win() == win then
-				vim.cmd("stopinsert")
-			end
-			vim.api.nvim_win_close(win, true)
-		end
-		if vim.api.nvim_win_is_valid(prev) and vim.api.nvim_get_current_win() ~= prev then
-			pcall(vim.api.nvim_set_current_win, prev)
-		end
+		dismiss(st)
 		cb(choice, text)
 	end
+	track(st, buf, function()
+		close("no")
+	end)
 	local function send()
 		close("text", answer())
 	end
@@ -306,15 +442,6 @@ function M.input(opts, cb)
 		close("no")
 	end, o)
 	vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, { buffer = buf, callback = fit })
-	vim.api.nvim_create_autocmd("WinLeave", {
-		buffer = buf,
-		once = true,
-		callback = function()
-			vim.schedule(function()
-				close("no")
-			end)
-		end,
-	})
 	return close
 end
 

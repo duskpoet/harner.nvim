@@ -119,6 +119,7 @@ M.config = {
 		cancel = "<leader>hx", -- cancel the running request
 		auto = "<leader>ha", -- toggle auto mode for the current chat
 		list = "<leader>hl", -- pick one of this nvim's chats (:HarnerChats)
+		minimize = "<leader>hm", -- minimize / restore the open confirm float (:HarnerMinimize)
 	},
 	-- the input popup (<leader>hh / :HarnerAsk)
 	prompt = {
@@ -161,6 +162,12 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("HarnerAuto", function()
 		require("harner.auto").toggle()
 	end, { desc = "Toggle harner auto mode for the current chat" })
+	local function minimize()
+		if not require("harner.confirm").toggle() then
+			vim.notify("harner: no confirm is waiting", vim.log.levels.INFO)
+		end
+	end
+	vim.api.nvim_create_user_command("HarnerMinimize", minimize, { desc = "Minimize / restore the open harner confirm float" })
 	vim.api.nvim_create_user_command("HarnerDecisions", function()
 		require("harner.decisions").show()
 	end, { desc = "Summarise what harner asked and how it was answered" })
@@ -220,6 +227,7 @@ function M.setup(opts)
 	map(keys.list, function()
 		chat().pick()
 	end, "Harner: pick a chat")
+	map(keys.minimize, minimize, "Harner: minimize / restore the confirm float")
 	if keys.group and keys.group ~= "" then
 		local ok, wk = pcall(require, "which-key")
 		if ok and wk.add then

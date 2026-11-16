@@ -44,6 +44,54 @@ confirm.ask({ title = "x", body = { "y" }, yes = "ok" }, function(c) got = c end
 keys("<CR>")
 check(got == "yes", "<CR> approves")
 
+-- minimize: `m` hides the float without answering and leaves a chip; the
+-- toggle brings it back, still answerable
+got = nil
+local base = vim.api.nvim_get_current_win()
+local close_min = confirm.ask({ title = "run this?", body = { "y" }, yes = "ok" }, function(c) got = c end)
+fw = vim.api.nvim_get_current_win()
+check(table.concat(vim.tbl_map(function(c) return c[1] end, vim.api.nvim_win_get_config(fw).footer)):find("m minimize", 1, true), "footer offers m minimize")
+keys("m")
+vim.wait(50)
+check(got == nil and vim.api.nvim_win_is_valid(fw) and vim.api.nvim_win_get_config(fw).hide == true, "m hides the float without answering")
+check(vim.api.nvim_get_current_win() == base, "focus is back in the window it came from")
+local chips = vim.tbl_filter(function(w) return w ~= fw end, floats())
+local chip_text = chips[1] and vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(chips[1]), 0, -1, false)[1] or ""
+check(#chips == 1 and chip_text:find("run this?", 1, true) and chip_text:find("<leader>hm restore", 1, true), "chip names the question and the key: " .. chip_text)
+check(vim.fn.maparg("<leader>hm", "n") ~= "" and vim.fn.exists(":HarnerMinimize") == 2, "global key and command registered")
+vim.cmd("HarnerMinimize")
+check(vim.api.nvim_get_current_win() == fw and vim.api.nvim_win_get_config(fw).hide ~= true and #floats() == 1, "toggle restores the float with focus, chip gone")
+keys("<CR>")
+check(got == "yes" and #floats() == 0, "restored float still answers")
+-- answered from elsewhere (cancel) while minimized: chip goes, focus stays put
+got = nil
+close_min = confirm.ask({ title = "x", body = { "y" }, yes = "ok" }, function(c) got = c end)
+check(confirm.toggle() == true, "toggle minimizes from anywhere")
+vim.wait(50)
+vim.cmd("new")
+local elsewhere = vim.api.nvim_get_current_win()
+close_min("no")
+check(got == "no" and #floats() == 0 and vim.api.nvim_get_current_win() == elsewhere, "closing a minimized float removes the chip and keeps focus")
+vim.cmd("close")
+check(confirm.toggle() == false, "nothing to toggle once answered")
+-- a minimized float closed from outside (:only) declines instead of hanging
+got = nil
+vim.cmd("new")
+confirm.ask({ title = "x", body = { "y" }, yes = "ok" }, function(c) got = c end)
+confirm.toggle()
+vim.wait(50)
+vim.cmd("only")
+vim.wait(50)
+check(got == "no" and #floats() == 0 and confirm.toggle() == false, ":only on a minimized float declines it")
+base = vim.api.nvim_get_current_win()
+-- leaving a restored float still declines
+got = nil
+confirm.ask({ title = "x", body = { "y" }, yes = "ok" }, function(c) got = c end)
+confirm.toggle(); confirm.toggle()
+vim.api.nvim_set_current_win(base)
+vim.wait(50)
+check(got == "no" and #floats() == 0, "leaving the float (not minimized) declines")
+
 -- ask_user with choices: the whole question in the float, numbered answers
 local q = "Should the cache key include the resolved path or the path as the user typed it? The resolved one survives symlinks but costs a stat per lookup."
 local r = tools.call("ask_user", { question = q, choices = { "resolved", "as typed", "no" } })

@@ -25,6 +25,7 @@ overlap), kept until nvim exits, reachable from any window:
 | `<leader>hl` | pick a chat to show (`:HarnerChats`)                       |
 | `<leader>hx` | cancel the running request                                 |
 | `<leader>ha` | toggle auto mode for the current chat (`:HarnerAuto`)      |
+| `<leader>hm` | minimize / restore the open confirm float (`:HarnerMinimize`) |
 
 Keys live in `config.keys` (any entry `false` disables it; `keys.group`
 registers a which-key group). `:HarnerAsk [text]` sends text directly or opens
@@ -181,7 +182,15 @@ All modules live in `lua/harner/`:
   `winhighlight`). `y`/`<CR>` approve, `a` approve and stop asking
   (exactly that command, or every write) for the current chat, `n`/`q`/
   `<Esc>`/`<C-c>` or leaving the float decline; `choices` adds other keys
-  (`edit_file` uses `s` save / `d` drop). Grants live on the chat
+  (`edit_file` uses `s` save / `d` drop). `m` in the float or
+  `config.keys.minimize` from anywhere (`M.toggle()`, acting on `current`,
+  the one open float) minimizes without answering: the window gets
+  `hide = true, focusable = false`, focus returns to `st.prev` and a
+  one-line unfocusable chip sits top right; the toggle restores it with
+  focus. `WinLeave` declines only while not minimized, `WinClosed` declines
+  a minimized float closed from outside (`:only`, `:fclose!`; no WinLeave
+  fires for it), and a float closed while minimized (cancel) does not move
+  focus (`dismiss()`). Grants live on the chat
   (`chat.grants`), so `<leader>hn` asks again. `ask()` returns the float's
   close function; `tools.lua` opens confirms through its local `ask()`, which
   files them under the running call's id (`asking[id]`) and queues them
@@ -442,7 +451,7 @@ nvim --headless -u NONE -l tests/render_test.lua
 # terminal title: prefix, format, format falling back on error / non-string
 nvim --headless -u NONE -l tests/title_test.lua
 
-# confirm float (full text, y/a/n), per-chat grants, multi-path save_file,
+# confirm float (full text, y/a/n, minimize / restore), per-chat grants, multi-path save_file,
 # cancel closing a confirm, edits reusing one window instead of splitting,
 # edit_file's save/drop prompt on a buffer with the user's unsaved changes
 nvim --headless -u NONE -l tests/confirm_test.lua
