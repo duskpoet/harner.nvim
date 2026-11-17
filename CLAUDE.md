@@ -94,6 +94,13 @@ All modules live in `lua/harner/`:
   windows whose buffer has an empty `buftype` qualify, so NERDTree, terminals,
   quickfix, help and show_text windows are never split or replaced (asking
   from the NERDTree window targets the file window next to it).
+  `show_text` (split modes) takes over a target holding an untouched
+  `[No Name]` buffer instead of splitting it (the split left an empty window
+  beside the text) and marks the window `w:harner_reused = {wrap}`:
+  `target_win()` returns a marked window before its `topleft vnew` last
+  resort, `display_win()` splits it rather than replacing the text, `q`
+  there switches back to the blank buffer, and `BufWinLeave` restores
+  winbar / wrap, drops the mark and deletes the blank buffer if hidden.
 - `render.lua` — transcript decorations (`config.render`). `attach(buf,
   limit)` hooks `nvim_buf_attach` and re-renders the whole buffer 40 ms after
   the last change (namespace `harner_render`, errors reported once). Markdown

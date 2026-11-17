@@ -34,6 +34,16 @@ local function buf_info(buf)
 	}
 end
 
+---True for an untouched `[No Name]` buffer: nothing in it worth keeping visible.
+---@param buf integer
+local function blank_buf(buf)
+	return vim.api.nvim_buf_get_name(buf) == ""
+		and vim.bo[buf].buftype == ""
+		and not vim.bo[buf].modified
+		and vim.api.nvim_buf_line_count(buf) == 1
+		and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
+end
+
 ---@class HarnerTool
 ---@field description string
 ---@field inputSchema table
@@ -70,6 +80,7 @@ M.tools.show_text = {
 		pcall(vim.api.nvim_buf_set_name, buf, string.format("harner://show/%d %s", buf, title))
 
 		local win
+		local close = "<cmd>close<CR>" ---@type string|function
 		if cfg.mode == "float" then
 			local width = math.min(math.floor(vim.o.columns * 0.8), math.max(40, cfg.float_width or 100))
 			local height = math.min(#lines + 1, math.floor(vim.o.lines * 0.8))
@@ -87,13 +98,57 @@ M.tools.show_text = {
 		else
 			local tw = target_win()
 			vim.api.nvim_set_current_win(tw)
-			vim.cmd(cfg.mode == "vsplit" and "vsplit" or "split")
+			-- An untouched [No Name] buffer (nvim started without a file, or
+			-- target_win's `vnew`) is taken over: splitting it would leave
+			-- an empty window next to the text.
+			local blank = vim.api.nvim_win_get_buf(tw)
+			local reuse = blank_buf(blank)
+			if not reuse then
+				vim.cmd(cfg.mode == "vsplit" and "vsplit" or "split")
+			end
 			win = vim.api.nvim_get_current_win()
+			local wrap = vim.wo[win].wrap
 			vim.api.nvim_win_set_buf(win, buf)
 			vim.wo[win].winbar = "%#Title# " .. title:gsub("%%", "%%%%") .. " %*"
+			-- With the blank buffer gone no window holds an ordinary buffer:
+			-- the mark keeps this one the target (chat.target_win) so the
+			-- next tool call does not open an empty window again.
+			vim.w[win].harner_reused = reuse and { wrap = wrap } or nil
+			if reuse then
+				-- the window outlives the text: give it back as it was
+				vim.api.nvim_create_autocmd("BufWinLeave", {
+					buffer = buf,
+					once = true,
+					callback = function()
+						if vim.api.nvim_win_is_valid(win) then
+							vim.wo[win].winbar = ""
+							vim.wo[win].wrap = wrap
+							vim.w[win].harner_reused = nil
+						end
+						-- the replaced buffer is not left behind in :ls
+						vim.schedule(function()
+							if
+								vim.api.nvim_buf_is_valid(blank)
+								and blank_buf(blank)
+								and #vim.fn.win_findbuf(blank) == 0
+							then
+								pcall(vim.api.nvim_buf_delete, blank, {})
+							end
+						end)
+					end,
+				})
+				close = function()
+					-- back to the blank buffer: closing would leave only the chat
+					if vim.w.harner_reused and vim.api.nvim_buf_is_valid(blank) then
+						vim.api.nvim_win_set_buf(0, blank)
+					else
+						vim.cmd("close")
+					end
+				end
+			end
 		end
 		vim.wo[win].wrap = true
-		vim.keymap.set("n", "q", "<cmd>close<CR>", { buffer = buf, nowait = true, desc = "Close harner window" })
+		vim.keymap.set("n", "q", close, { buffer = buf, nowait = true, desc = "Close harner window" })
 		return string.format("Displayed %d lines titled %q to the user.", #lines, title)
 	end,
 }
@@ -172,7 +227,10 @@ local function display_win(buf)
 		end
 	end
 	local win = target_win()
-	if claude_owned(vim.api.nvim_win_get_buf(win)) then
+	-- a window show_text took over is split, not replaced: the text stays
+	-- (the mark alone can be stale: the text may have left for a file)
+	local shown = vim.bo[vim.api.nvim_win_get_buf(win)].buftype ~= "" and vim.w[win].harner_reused
+	if not shown and claude_owned(vim.api.nvim_win_get_buf(win)) then
 		return win
 	end
 	if
@@ -187,6 +245,12 @@ local function display_win(buf)
 	vim.api.nvim_set_current_win(win)
 	vim.cmd("split")
 	side_win = vim.api.nvim_get_current_win()
+	if shown then
+		-- the split copied the text window's title and wrap
+		vim.wo[side_win].winbar = ""
+		vim.wo[side_win].wrap = shown.wrap
+		vim.w[side_win].harner_reused = nil
+	end
 	return side_win
 end
 

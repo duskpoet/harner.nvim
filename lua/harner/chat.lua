@@ -139,6 +139,12 @@ function M.target_win()
 			return win
 		end
 	end
+	-- a blank window show_text took over is still the user's editing spot
+	for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+		if vim.w[win].harner_reused and vim.api.nvim_win_get_config(win).relative == "" then
+			return win
+		end
+	end
 	-- only chat windows exist: make room on the left
 	vim.cmd("topleft vnew")
 	return vim.api.nvim_get_current_win()

@@ -145,4 +145,46 @@ end
 check(count(a) == 1 and count(b) == 0 and a.run and b.run and not idle.run, "several running: nothing cancelled")
 vim.wait(3000, function() return not a.run and not b.run end, 20)
 
+-- show_text takes over an untouched [No Name] window instead of splitting it
+-- (which left an empty window next to the text), and splits a real file
+vim.cmd("silent! only | enew")
+local blank_win = vim.api.nvim_get_current_win()
+local blank_buf = vim.api.nvim_get_current_buf()
+vim.wo[blank_win].wrap = false
+tools.call("show_text", { title = "T", content = "hello" })
+check(#vim.api.nvim_tabpage_list_wins(0) == 1, "show_text reuses a blank window")
+check(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(blank_win)):find("harner://show/", 1, true), "text shown in it")
+-- with no ordinary buffer left the text window stays the target: read tools
+-- open nothing, open_file splits it and keeps the text
+check(chat.target_win() == blank_win and #vim.api.nvim_tabpage_list_wins(0) == 1, "reused window is the target, no new window")
+vim.fn.writefile({ "delta" }, dir .. "/d.txt") -- never shown: b.txt would bring its remembered options
+tools.call("open_file", { path = dir .. "/d.txt" })
+local file_win = vim.api.nvim_get_current_win()
+check(#vim.api.nvim_tabpage_list_wins(0) == 2 and file_win ~= blank_win, "open_file splits the text window")
+check(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(blank_win)):find("harner://show/", 1, true), "text still shown")
+check(vim.wo[file_win].winbar == "" and not vim.wo[file_win].wrap, "file window without the text's title and wrap")
+check(chat.target_win() == file_win, "the file window is the target again")
+vim.api.nvim_win_close(file_win, true)
+vim.api.nvim_set_current_win(blank_win)
+-- a file no window showed before: a.txt would bring its remembered options
+vim.cmd("edit " .. dir .. "/c.txt")
+check(vim.wo[blank_win].winbar == "", "winbar cleared after the text left: " .. vim.wo[blank_win].winbar)
+check(not vim.wo[blank_win].wrap, "wrap restored after the text left")
+vim.wait(20) -- the replaced blank buffer is deleted on the next tick
+check(not vim.api.nvim_buf_is_valid(blank_buf), "replaced blank buffer not left behind")
+-- q gives a reused window its blank buffer back instead of closing it
+vim.cmd("enew")
+local blank2 = vim.api.nvim_get_current_buf()
+tools.call("show_text", { title = "T", content = "hello" })
+vim.api.nvim_feedkeys("q", "x", false)
+check(vim.api.nvim_win_is_valid(blank_win) and vim.api.nvim_win_get_buf(blank_win) == blank2, "q returns to the blank buffer")
+check(vim.wo[blank_win].winbar == "" and chat.target_win() == blank_win, "blank window as before the text")
+vim.cmd("edit " .. dir .. "/c.txt")
+tools.call("show_text", { title = "T", content = "hello" })
+check(#vim.api.nvim_tabpage_list_wins(0) == 2, "show_text splits a file window")
+vim.api.nvim_feedkeys("q", "x", false)
+check(#vim.api.nvim_tabpage_list_wins(0) == 1, "q closes a split text window")
+tools.call("show_text", { title = "T", content = "hello" })
+check(vim.api.nvim_win_get_buf(blank_win) == vim.fn.bufnr(dir .. "/c.txt"), "file window untouched")
+
 t.finish()
