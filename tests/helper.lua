@@ -19,10 +19,10 @@ function M.check(cond, msg)
   io.stderr:write((cond and "ok   " or "FAIL ") .. msg .. "\n")
 end
 
--- Print the verdict every test ends with and quit.
+-- Print the verdict every test ends with and quit (exit code 1 on failures, for CI).
 function M.finish()
   io.stderr:write(M.fails == 0 and "ALL OK\n" or (M.fails .. " FAILED\n"))
-  vim.cmd("qa!")
+  vim.cmd(M.fails == 0 and "qa!" or "cq")
 end
 
 return M

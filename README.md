@@ -1,5 +1,7 @@
 # harner.nvim
 
+[![tests](https://github.com/duskpoet/harner.nvim/actions/workflows/test.yml/badge.svg)](https://github.com/duskpoet/harner.nvim/actions/workflows/test.yml)
+
 Chat with [Claude Code](https://docs.claude.com/en/docs/claude-code) from a
 Neovim split, with Claude working *inside your editor* instead of next to it.
 
@@ -81,6 +83,8 @@ load on first use instead, list the commands and keys in the spec:
 
 With any other plugin manager, add the repository and call
 `require("harner").setup({})` yourself.
+
+Inside Neovim the same documentation is available as `:help harner`.
 
 ## Quick start
 
@@ -423,8 +427,9 @@ nvim --headless -u NONE -l tests/auto_test.lua     # auto mode rules and classif
 nvim --headless -u NONE -l tests/runner_test.lua   # stream parsing against a fake claude
 ```
 
-`tests/chat_test.lua` runs the full loop against the real CLI (about two
-minutes, costs money). Design notes and gotchas are in `CLAUDE.md`.
+A failing test exits non-zero; CI (`.github/workflows/test.yml`) runs them on
+Neovim 0.10, stable and nightly. `tests/chat_test.lua` runs the full loop
+against the real CLI (about two minutes, costs money). Design notes and gotchas are in `CLAUDE.md`.
 
 ## License
 

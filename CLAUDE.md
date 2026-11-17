@@ -426,7 +426,12 @@ except the paths `auto.writes_blocker` flags).
 Headless, run from the repo root; every offline test ends with `ALL OK`. Each
 test starts by `dofile`-ing `tests/helper.lua`, which derives the repo root
 from its own path and prepends it to the rtp (so the checkout can live
-anywhere) and provides `check(cond, msg)` / `finish()`.
+anywhere) and provides `check(cond, msg)` / `finish()` (`cq` on failures, so
+the exit code is 1). `.github/workflows/test.yml` runs the offline tests on
+Linux (nvim 0.10.4, stable, nightly) and macOS (stable); a new test file must
+be added to its loop. `doc/harner.txt` (`:h harner`) is a condensed copy of
+the README: update both when commands, keys or config defaults change
+(`doc/tags` is generated and ignored).
 `vim.ui.select`/`vim.ui.input` (and `confirm.ask` in bridge_test) are
 stubbed wherever an async tool is exercised; confirm_test drives the real
 float with `feedkeys(..., "x")`:

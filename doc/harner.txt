@@ -1,0 +1,436 @@
+*harner.txt*	Chat with Claude Code from a split, with Claude in your editor
+
+Requires Neovim 0.10+ and the Claude Code CLI (`claude`) on PATH, logged in.
+
+==============================================================================
+CONTENTS                                                     *harner-contents*
+
+  1. Introduction ............................ |harner-introduction|
+  2. Setup ................................... |harner-setup|
+  3. Commands ................................ |harner-commands|
+  4. Mappings ................................ |harner-mappings|
+  5. The popup and the chat split ............ |harner-chat|
+  6. Editor tools ............................ |harner-tools|
+  7. Confirms and auto mode .................. |harner-confirm|
+  8. Security ................................ |harner-security|
+  9. Configuration ........................... |harner-config|
+ 10. Extra MCP servers ....................... |harner-mcp|
+ 11. Highlight groups ........................ |harner-highlights|
+ 12. Troubleshooting ......................... |harner-troubleshooting|
+
+==============================================================================
+1. INTRODUCTION                                 *harner* *harner-introduction*
+
+harner runs the `claude` CLI headless (`claude -p`) and gives it an MCP
+server that talks to the Neovim you are sitting in. Claude can then:
+
+- see what you see: current buffer, cursor, visual selection, open buffers
+  and LSP diagnostics;
+- show you things: jump your window to a file and highlight lines, or open
+  long output in a scratch window;
+- edit your buffers: changes land in the buffer unsaved, so you review them
+  with your usual tools and undo with |u|;
+- ask you: questions with choices, and a confirm float before it runs an Ex
+  command or a shell command.
+
+The transcript is a markdown buffer, prompts are typed in a small popup, and
+every chat keeps its own Claude session with your `CLAUDE.md`, skills and MCP
+connectors. Requests are billed to the account the CLI is logged in with.
+
+==============================================================================
+2. SETUP                                                        *harner-setup*
+
+With lazy.nvim: >lua
+    {
+      "duskpoet/harner.nvim",
+      event = "VeryLazy",
+      opts = {},
+    }
+<
+`opts` is passed to `require("harner").setup()`. Without `opts` (or
+`config`) lazy.nvim never calls `setup()` and no commands or keys exist.
+
+                                                              *harner.setup()*
+require("harner").setup({opts})
+    Registers the commands and the global mappings. {opts} is merged over
+    the defaults, see |harner-config|. With any other plugin manager, add
+    the repository and call this yourself.
+
+Quick start ~
+
+1. Open a file and press `<leader>hh`. Type a question in the popup and
+   press <CR>.
+2. The chat split opens on the right and the answer streams in. Lines like
+   `→ nvim:get_current_buffer` show which tools Claude used.
+3. Select some lines in visual mode, press `<leader>hh` and ask
+   `simplify this`. Claude reads the selection, edits the buffer and moves
+   your window to the change. Review it, then |:w| to keep it or |u| to
+   undo.
+4. Keep asking with `<leader>hh` (same conversation), or press `<leader>hn`
+   for a fresh one.
+
+==============================================================================
+3. COMMANDS                                                  *harner-commands*
+
+                                                                     *:Harner*
+:Harner                 Toggle the chat split.
+
+                                                                  *:HarnerAsk*
+:[range]HarnerAsk [text]
+                        Send [text] to the current chat, or open the input
+                        popup when called without text. With a [range]
+                        (`:'<,'>HarnerAsk`) the lines are attached as a
+                        reference, see |harner-selection|.
+
+                                                                  *:HarnerNew*
+:HarnerNew              Start a new chat (a fresh Claude session). The old
+                        chat is kept.
+
+                                                                *:HarnerChats*
+:HarnerChats            Pick one of this Neovim's chats to show.
+
+                                                               *:HarnerCancel*
+:HarnerCancel           Cancel the running request: the current chat's, else
+                        the only running one.
+
+                                                                 *:HarnerAuto*
+:HarnerAuto             Toggle auto mode for the current chat, see
+                        |harner-auto|.
+
+                                                             *:HarnerMinimize*
+:HarnerMinimize         Minimize or restore the open confirm float, to read
+                        what it covers before answering.
+
+                                                            *:HarnerDecisions*
+:HarnerDecisions        Show a summary of what was confirmed, declined or
+                        run unasked, by tool and command.
+
+==============================================================================
+4. MAPPINGS                                                  *harner-mappings*
+
+Global mappings, set by |harner.setup()|. Each one is configurable through
+`keys` in |harner-config|; set an entry to `false` to skip it.
+
+    Key            Action ~
+    `<leader>hh`     input popup for the current chat; in visual mode it
+                   attaches a reference to the selection
+    `<leader>ht`     toggle the chat split
+    `<leader>hn`     new chat
+    `<leader>hl`     pick a chat to show
+    `<leader>hx`     cancel the running request
+    `<leader>ha`     toggle auto mode for the current chat
+    `<leader>hm`     minimize / restore the open confirm float
+
+==============================================================================
+5. THE POPUP AND THE CHAT SPLIT                                  *harner-chat*
+
+The popup ~
+                                                                *harner-popup*
+<CR> sends, <S-CR> or <C-CR> inserts a newline, <Esc> closes and keeps the
+text as a draft for the next open. Sending while Claude is still answering
+queues the message; it goes out when the current reply ends (the winbar
+shows `N queued`).
+
+The chat split ~
+                                                                *harner-split*
+Everything below the last `────` line is your next message: <CR> in normal
+mode or <C-s> in insert mode sends it, <C-c> cancels a run. |gf| on a URL or
+a `path/file.lua:12-20` reference opens it.
+
+The winbar shows the state (`thinking…`, `running Grep`, `idle`), the cost
+of the last reply, how full the context window is (`ctx 42k/200k 21%`) and
+the `AUTO` badge.
+
+Selections ~
+                                                            *harner-selection*
+A selection is passed by reference, not pasted: the prompt ends with a
+`Selection: <path> lines N-M` line and Claude reads the lines itself.
+
+Several chats ~
+                                                                *harner-chats*
+Chats live until Neovim exits. Closing the split, |:bdelete| or |:bwipeout|
+on a chat buffer only hides it; `<leader>hl` brings it back with the same
+transcript and Claude session. Several chats can run at once; each one's
+tools act on the window it was asked from.
+
+==============================================================================
+6. EDITOR TOOLS                                                 *harner-tools*
+
+What Claude can do in the editor:
+
+Read ~
+    `get_current_buffer`, `get_cursor`, `get_selection`, `list_buffers`,
+    `get_diagnostics`
+
+Display ~
+    `show_text`     scratch window with a filetype, `q` closes it
+    `open_file`     jump to a file and highlight a line range
+
+Change ~
+    `edit_file`     str_replace-style edit applied to the buffer, unsaved
+                  and undoable
+    `write_file`    create or replace a whole file on disk
+    `save_file`     write modified buffers, several under one confirm
+
+    Disk writes are unasked except outside the working directory, under
+    `.git/` or `.claude/`, and for files that run code when loaded.
+
+Interact ~
+    `ask_user`      question with optional choices
+    `run_command`   an Ex command, confirmed unless it starts with an entry
+                  of `run_command.allow`
+
+Shell ~
+                                                                 *harner-bash*
+    `bash`          opt-in (`bash = { enabled = true }`). Runs a command with
+                  `bash -c` in the working directory and returns stdout,
+                  stderr and the exit code. No stdin or TTY.
+
+    Each command is confirmed unless it starts with an entry of `bash.allow`
+    and contains no shell operators (`;`, `&`, `|`, redirects, `$`,
+    backticks, ...). The operator check does not limit what the allowed
+    program does with its own arguments, so keep entries to specific
+    read-only subcommands (`git status`, `git log`, `gh pr view`). A bare
+    program name allows everything it can do.
+
+    Commands are killed (whole process group) on timeout, on cancel and at
+    the end of the reply. With the tool off, Claude is told to say up front
+    when a task needs a shell.
+
+Next to these, Claude has its built-in read-only tools (`Read`, `Grep`,
+`Glob`, `WebFetch`) and nothing else: no built-in shell and no direct file
+write.
+
+==============================================================================
+7. CONFIRMS AND AUTO MODE                                     *harner-confirm*
+
+Commands and the disk writes that ask are confirmed in a small float that
+shows the full command or file list:
+
+    `y` / <CR>       approve
+    `a`              approve and stop asking for the rest of the chat (that
+                   exact command, or all writes)
+    `n` / <Esc>      skip
+    `m`              minimize without answering (|:HarnerMinimize| restores)
+
+Edited files are shown in your working window; if it holds unsaved changes
+of your own, harner splits once and reuses that window for every later
+file. If Claude wants to edit a file you have unsaved changes in, it asks
+first: `s` saves your changes and then edits, `d` drops them (reloads from
+disk), `n` skips the edit.
+
+Auto mode ~
+                                                                 *harner-auto*
+Auto mode is on by default (the winbar shows `AUTO`); |:HarnerAuto| toggles
+it for the current chat, and a new chat starts at `auto.enabled`. Your
+allow-lists and `a` grants still apply first. Beyond them:
+
+- With `write_file.confirm = true`, writes inside the working directory run
+  without asking (with the default `false` they never ask anyway).
+- Writes outside the working directory or under `.git/` / `.claude/` go to
+  the classifier below, which also sees the content or the diff.
+- Files that run code or grant permissions always ask, auto mode or not:
+  `.nvim.lua`, `.nvimrc`, `.exrc`, `.lazy.lua`, `.envrc`, a `.git` file,
+  `hooks/` and `config` under `.git/`, everything under a `.claude/` dir
+  except memory notes in `projects/<x>/memory/`, and `~/.claude.json`.
+- A built-in list of read-only shell commands runs without asking
+  (`git status|log|diff|show|blame`, read-only `git branch`, `ls`, `pwd`,
+  `rg`, and `cat|head|tail|wc` on paths inside the working directory), plus
+  your `auto.allow` entries. Chains (`&&`, `||`, `;`, `|`) pass when every
+  part does; any other operator, redirect, `$` or backtick rules the
+  command out.
+- Every other `bash` and `run_command` call goes to a classifier
+  (`claude -p --model haiku`, no tools) that sees the command, Claude's
+  description and your latest message. It either lets the call run or
+  opens the normal confirm with its reason under the command. It never
+  refuses on its own; an error or a timeout (`auto.timeout`) asks you.
+- The save/drop question over your own unsaved changes always asks.
+
+Calls that ran unasked are marked in the transcript, e.g.
+`→ nvim:bash · $ git log -5 · auto (rule)` or `· auto (classifier)`.
+
+Decision log ~
+                                                            *harner-decisions*
+Every decision (rule, classifier, or your answer to a confirm) is appended
+to `decisions.path`. |:HarnerDecisions| summarises it, so you can see what
+still asks and add `auto.allow` entries for it.
+
+==============================================================================
+8. SECURITY                                                  *harner-security*
+
+Headless Claude silently denies anything not pre-approved. harner restricts
+the built-in tools to `Read`, `Grep`, `Glob`, `WebFetch` and `ToolSearch`
+and approves the `nvim` MCP server, so all changes go through the tools in
+|harner-tools|.
+
+Things to know before you rely on that:
+
+- Claude can read any file your user can (`Read` is not limited to the
+  working directory) and fetch URLs.
+- By default, writes inside the working directory are not confirmed. Set
+  `write_file.confirm = true` and turn auto mode off to approve each one.
+- Auto mode is a convenience, not a sandbox: its classifier is a model and
+  can be wrong. Set `auto = { enabled = false }` to confirm every command.
+- `claude -p` has no trust prompt for the project. harner denies the MCP
+  servers of project `.mcp.json` files, but a project's
+  `.claude/settings.json` is still read: its `permissions.allow` can
+  pre-approve tools and its `hooks` run commands. Only chat in repositories
+  you trust, as you would with `claude` itself.
+
+==============================================================================
+9. CONFIGURATION                                               *harner-config*
+
+Defaults: >lua
+    require("harner").setup({
+      claude_cmd = "claude",
+      model = nil,            -- passed as --model when set
+      width = 0.4,            -- chat split: fraction of columns, or
+                              -- columns if >= 1
+      builtin_tools = { "Read", "Grep", "Glob", "WebFetch", "ToolSearch" },
+      allowed_tools = { "mcp__nvim" },
+      extra_args = {},        -- appended to the claude argv (no --settings)
+      mcp_servers = {},       -- extra MCP servers, see |harner-mcp|
+      connectors = {},        -- claude.ai connectors to approve
+      show_text = {
+        mode = "split",       -- "split" | "vsplit" | "float"
+        float_width = 100,
+      },
+      title = {
+        enabled = false,      -- mirror the chat state into 'titlestring'
+        prefix = "",          -- string or function
+        format = nil,         -- function(state, chat) -> string
+      },
+      render = {
+        enabled = true,       -- box tables, shade code, link URLs and
+                              -- file:line references
+        conceal = true,       -- 'conceallevel' 2 in the chat window
+        tables = true,        -- re-pad finished tables
+        wrap_tables = true,   -- wrap long cells when a table is too wide
+      },
+      run_command = {
+        confirm = true,       -- ask before commands not covered by `allow`
+        allow = { "edit", "Telescope", "DiffviewOpen", "Git blame",
+                  "Git log", "Git diff" },
+      },
+      write_file = {
+        confirm = false,      -- true: ask before every disk write (auto
+                              -- mode off)
+      },
+      bash = {
+        enabled = false,      -- opt-in shell tool
+        confirm = true,       -- ask before commands not covered by `allow`
+        allow = {},           -- read-only subcommands only
+        shell = "bash",       -- run as `<shell> -c <command>`
+        timeout = 120,        -- seconds when Claude gives none (max 540)
+        max_output = 30000,   -- bytes returned to Claude
+      },
+      auto = {
+        enabled = true,       -- default for new chats
+        allow = {},           -- extra bash prefixes that run without asking
+        model = "haiku",      -- classifier model
+        timeout = 15,         -- classifier seconds before asking instead
+      },
+      decisions = {
+        enabled = true,
+        path = nil,           -- stdpath("state")/harner/decisions.jsonl
+      },
+      keys = {                -- set an entry to false to skip it
+        group = "<leader>h",  -- which-key group label
+        ask = "<leader>hh",
+        toggle = "<leader>ht",
+        new = "<leader>hn",
+        cancel = "<leader>hx",
+        auto = "<leader>ha",
+        list = "<leader>hl",
+        minimize = "<leader>hm",
+      },
+      prompt = {
+        width = 0.6,
+        min_height = 1,
+        max_height = 10,
+        border = "rounded",
+        open_chat = true,     -- open the chat split when sending
+      },
+    })
+<
+==============================================================================
+10. EXTRA MCP SERVERS                                             *harner-mcp*
+
+Claude loads every MCP server it knows about: claude.ai connectors, servers
+added with `claude mcp add`, plugin servers. harner approves only `nvim` and
+the ones you list; Claude still sees the others (deferred through
+`ToolSearch`), but every call to them is denied.
+
+The exception is project `.mcp.json` files (in the working directory or any
+parent): `claude -p` would start them without a trust prompt, so harner
+denies them. If one can't be read, that chat runs with
+`--strict-mcp-config` and loads none of the above.
+
+Servers that only harner should use go in `mcp_servers` (Claude's
+`mcpServers` format; the name `nvim` is reserved). Every tool they offer is
+pre-approved. claude.ai connectors go in `connectors`, by the name
+`claude mcp list` shows without the `claude.ai ` prefix: >lua
+    require("harner").setup({
+      connectors = { "Linear" },
+      mcp_servers = {
+        github = {
+          type = "http",
+          url = "https://api.githubcopilot.com/mcp/",
+          headers = {
+            Authorization = "Bearer " .. (os.getenv("GITHUB_TOKEN") or ""),
+          },
+        },
+      },
+    })
+<
+For an OAuth server, log in once from interactive `claude` (`/mcp`) with a
+server of the same name and URL; `claude -p` reuses the stored token. The
+generated config file can contain API keys: it is written `0600` and deleted
+when the run ends.
+
+==============================================================================
+11. HIGHLIGHT GROUPS                                       *harner-highlights*
+
+All groups are defined with `default = true`, so a colorscheme or your own
+|nvim_set_hl()| wins.
+
+    Group                    Default link ~
+    `HarnerWinBar`             |hl-StatusLine|
+    `HarnerWinBarNC`           |hl-StatusLineNC|
+    `HarnerConfirmBorder`      `DiagnosticInfo`
+    `HarnerConfirmTitle`       `DiagnosticInfo`
+    `HarnerConfirmKey`         `DiagnosticInfo`
+    `HarnerConfirmFooter`      `Comment`
+    `HarnerConfirmNormal`      |hl-NormalFloat|
+
+The transcript uses `HarnerCodeBlock`, `HarnerCodeLang`, `HarnerToolNote`,
+`HarnerSeparator`, `HarnerError`, `HarnerTableBorder`, `HarnerTableHead`,
+`HarnerUrl` and `HarnerFileRef`. If your `NormalFloat` matches `Normal`,
+give `HarnerConfirmNormal` a distinct background so confirms stand out.
+
+==============================================================================
+12. TROUBLESHOOTING                                   *harner-troubleshooting*
+
+No `:Harner` command or keys ~
+    |harner.setup()| was not called: the lazy.nvim spec needs `opts = {}`.
+
+"`claude` not found on PATH" in the chat ~
+    The CLI is not on the PATH Neovim sees; set `claude_cmd` to its full
+    path.
+
+Authentication errors ~
+    Run `claude` in a terminal and log in; harner uses the same credentials.
+
+Claude says a task needs a shell ~
+    Enable the opt-in tool with `bash = { enabled = true }`, see
+    |harner-bash|.
+
+A connector's tools are denied ~
+    Only servers listed in `mcp_servers` or `connectors` are approved, see
+    |harner-mcp|.
+
+Tables or markup look raw ~
+    Install the `markdown` and `markdown_inline` treesitter parsers, or
+    check `render` in |harner-config|.
+
+ vim:tw=78:ts=8:noet:ft=help:norl:
