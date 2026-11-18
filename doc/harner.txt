@@ -304,6 +304,12 @@ Defaults: >lua
         backend = "auto",     -- "auto" | "agterm" | false
         info = true,          -- agterm: activity line under the row
         agtermctl = "agtermctl",
+        notify = {            -- notification escapes, any terminal
+          enabled = false,
+          when = "unfocused", -- or "always"
+          events = { "blocked", "done", "error" },
+          protocol = "auto",  -- "auto" | "osc9" | "osc99" | "osc777" | "bell"
+        },
       },
       render = {
         enabled = true,       -- box tables, shade code, link URLs and
@@ -360,7 +366,18 @@ Defaults: >lua
 <
                                                              *harner-terminal*
 harner works the same in every terminal. `title` mirrors the chat state into
-the terminal title anywhere. Inside agterm (detected by itself when
+the terminal title anywhere. `terminal.notify` (opt-in, `enabled = true`) writes a
+desktop notification escape while the terminal is unfocused: when a confirm
+or ask_user float starts waiting (`blocked`), when a run ends (`done`) or
+fails (`error`); not after a cancel. `protocol = "auto"` picks OSC 99 for
+kitty, OSC 9 for Ghostty, iTerm2, WezTerm and agterm, OSC 777 for foot and a
+plain BEL elsewhere, from the environment; over ssh set it yourself if the
+guess is wrong. It works through ssh and dtach; tmux needs
+`allow-passthrough on` and, for "unfocused", `focus-events on`. Without focus
+events harner assumes the terminal is focused; `when = "always"` notifies
+regardless. Nothing is sent in auto mode while the agterm backend is active.
+
+Inside agterm (detected by itself when
 `agtermctl` is on PATH) the session's status glyph follows harner: `active`
 while a chat runs, `blocked` while a confirm or ask_user float waits,
 `completed` after a run until the session is visited (with a triangle glyph

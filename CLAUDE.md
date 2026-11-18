@@ -270,10 +270,29 @@ All modules live in `lua/harner/`:
   under `-p` and would paint the same glyph (wrong for overlapping chats,
   confirms and cancels); their script exits on an empty id. `leave()`
   (VimLeavePre) resets synchronously. tests/helper.lua pins `backend =
-  false` so tests run inside agterm never touch the real row. Planned next:
-  an `osc` backend (OSC 9/777/99 notifications for other terminals and
-  ssh/dtach sessions) and a `show_page` tool (agterm overlay, else
-  `vim.ui.open`).
+  false` so tests run inside agterm never touch the real row.
+  Notifications (`config.terminal.notify`, opt-in: the BEL fallback would
+  beep at users of terminals without a notification escape) are a second,
+  backend-independent output of the same facts: `announce(state)` in the
+  scheduled pass of `update()` fires `blocked` on the transition into it and
+  `done`/`error` for a run `finished()` recorded in `ended` (`started()`
+  clears it, so a queued follow-up in the same tick stays quiet; cancels
+  never set it). `notify()` gates on `events`, on `focused` (`M.focus()`
+  from the `harner_focus` FocusGained/FocusLost autocmds in `setup()`;
+  assumed focused until a FocusLost, `when = "always"` skips the gate) and,
+  with `protocol = "auto"`, on no status backend being active. `protocol()`
+  guesses from the environment, terminal-set variables first: agterm /
+  Ghostty → OSC 9, `KITTY_WINDOW_ID` → OSC 99, WezTerm / iTerm2
+  (`LC_TERMINAL` survives ssh) → OSC 9, bare `TERM=xterm-kitty` etc. → OSC 9
+  only (agterm itself runs with `xterm-kitty`, and all of them take OSC 9),
+  `foot*` → OSC 777, else BEL. Checked against the kitty, Ghostty, WezTerm,
+  iTerm2 and foot docs in 2026-11; OSC 9;4 progress is deliberately not sent
+  (terminals with OSC 9 but no 9;4 would show it as a notification). With
+  `$TMUX` the escape is wrapped in `ESC P tmux; … ESC \` (escapes doubled;
+  BEL goes as it is). `M.send` writes it: `nvim_ui_send` where it exists,
+  else `nvim_chan_send(2, …)`, and only when a UI with `stdout_tty` is
+  attached (headless and GUIs get nothing); notify_test replaces it.
+  Planned next: a `show_page` tool (agterm overlay, else `vim.ui.open`).
 - `tools.lua` — `M.tools[name] = {description, inputSchema, handler, async?}`.
   `list()` and `call(name, args)` are what the bridge invokes. Sync handlers
   return a string; errors become `isError = true` results. Async handlers
@@ -508,6 +527,10 @@ nvim --headless -u NONE -l tests/runner_test.lua
 # terminal status: no backend outside agterm, active / completed / blocked /
 # idle against a fake `agtermctl`, empty AGTERM_SESSION_ID for claude, leave
 nvim --headless -u NONE -l tests/term_test.lua
+
+# notifications: escape per terminal, focus gate, events, tmux wrapping,
+# silence next to the agterm backend (term.send replaced)
+nvim --headless -u NONE -l tests/notify_test.lua
 
 # full loop against the real claude CLI: three messages, later ones resume (~2 min, costs money)
 nvim --headless -u NONE -l tests/chat_test.lua

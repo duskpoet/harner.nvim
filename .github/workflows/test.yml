@@ -32,7 +32,7 @@ jobs:
         run: |
           nvim --version | head -1
           status=0
-          for t in bridge chats prompt render title confirm bash auto runner term; do
+          for t in bridge chats prompt render title confirm bash auto runner term notify; do
             echo "::group::${t}_test"
             # a test passes when it exits 0 and its last line is ALL OK
             if nvim --headless -u NONE -l "tests/${t}_test.lua" 2>&1 | tee out.log \

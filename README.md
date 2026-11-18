@@ -272,6 +272,12 @@ require("harner").setup({
     backend = "auto",     -- "auto" | "agterm" | false: show harner's state in the hosting terminal, see below
     info = true,          -- agterm: activity line under the session row
     agtermctl = "agtermctl", -- name on PATH or absolute path
+    notify = {            -- desktop notifications through a terminal escape, see below
+      enabled = false,
+      when = "unfocused", -- or "always"
+      events = { "blocked", "done", "error" }, -- waiting for you / run ended / run failed
+      protocol = "auto",  -- "auto" | "osc9" | "osc99" | "osc777" | "bell"
+    },
   },
   render = {
     enabled = true,       -- decorate the transcript: box tables, shaded code, URL / file:line links (`gf` follows)
@@ -389,10 +395,33 @@ give `HarnerConfirmNormal` a distinct background so confirms stand out.
 
 ## Terminal integration
 
-harner works the same in every terminal. Two things are optional extras:
+harner works the same in every terminal. Three things are optional extras:
 
 - **Title** (any terminal): `title = { enabled = true }` mirrors the chat
   state into the terminal title.
+- **Notifications** (any terminal, opt-in with
+  `terminal = { notify = { enabled = true } }`): while the terminal is
+  unfocused, harner writes a notification escape when a confirm or
+  `ask_user` float starts waiting for you, when a run ends and when one
+  fails (`terminal.notify.events`). A cancel is not announced, nor is a run
+  that only makes room for the next queued message. The escape is picked
+  from the environment:
+
+  | terminal                              | escape  |
+  | ------------------------------------- | ------- |
+  | kitty                                 | OSC 99  |
+  | Ghostty, iTerm2, WezTerm, agterm      | OSC 9   |
+  | foot                                  | OSC 777 |
+  | anything else (Alacritty, Terminal.app, Windows Terminal, …) | BEL |
+
+  It is plain terminal output, so it also works through ssh and dtach.
+  Over ssh the terminal's own variables are usually gone: if the guess is
+  wrong there, set `protocol` yourself. Inside tmux the escape is wrapped
+  for passthrough, which needs `set -g allow-passthrough on`, and
+  "unfocused" needs `set -g focus-events on`. Without focus events from
+  the terminal harner assumes it is focused and stays quiet;
+  `when = "always"` notifies regardless. With `protocol = "auto"` nothing
+  is sent while the agterm backend below shows the state already.
 - **agterm**: detected by itself
   (`terminal.backend = "auto"`) when nvim runs in an agterm pane and
   `agtermctl` is on `PATH`. The session's status glyph then follows harner:
@@ -462,6 +491,7 @@ nvim --headless -u NONE -l tests/bash_test.lua     # opt-in shell tool, allow-li
 nvim --headless -u NONE -l tests/auto_test.lua     # auto mode rules and classifier
 nvim --headless -u NONE -l tests/runner_test.lua   # stream parsing against a fake claude
 nvim --headless -u NONE -l tests/term_test.lua     # terminal status against a fake agtermctl
+nvim --headless -u NONE -l tests/notify_test.lua   # notification escapes per terminal, focus gate
 ```
 
 A failing test exits non-zero; CI (`.github/workflows/test.yml`) runs them on

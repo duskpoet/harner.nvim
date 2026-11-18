@@ -56,6 +56,19 @@ M.config = {
 		backend = "auto", ---@type "auto"|"agterm"|false
 		info = true,
 		agtermctl = "agtermctl", -- name on PATH or absolute path
+		-- opt-in: desktop notifications through a terminal escape, in any terminal
+		-- and through ssh/dtach/tmux (tmux needs `allow-passthrough on`). `when`:
+		-- "unfocused" (needs the terminal's focus events; in tmux `focus-events
+		-- on`) or "always". `protocol`: "auto" picks OSC 99 (kitty), OSC 9
+		-- (Ghostty, iTerm2, WezTerm, agterm), OSC 777 (foot) or a plain BEL from
+		-- the environment, and stays silent while a backend above shows the
+		-- state; "osc9" | "osc99" | "osc777" | "bell" force one.
+		notify = {
+			enabled = false,
+			when = "unfocused", ---@type "unfocused"|"always"
+			events = { "blocked", "done", "error" }, -- waiting for you / run ended / run failed
+			protocol = "auto", ---@type "auto"|"osc9"|"osc99"|"osc777"|"bell"
+		},
 	},
 	-- chat transcript decorations: aligned box tables, shaded code blocks,
 	-- highlighted URLs and `file.lua:12` references (`gf` follows them), and
@@ -204,6 +217,13 @@ function M.setup(opts)
 			vim.keymap.set("n", lhs, rhs, { desc = desc })
 		end
 	end
+	-- notifications only go out while the terminal is unfocused
+	vim.api.nvim_create_autocmd({ "FocusGained", "FocusLost" }, {
+		group = vim.api.nvim_create_augroup("harner_focus", { clear = true }),
+		callback = function(ev)
+			require("harner.term").focus(ev.event == "FocusGained")
+		end,
+	})
 	-- bash commands run detached (own session) and would outlive nvim
 	vim.api.nvim_create_autocmd("VimLeavePre", {
 		group = vim.api.nvim_create_augroup("harner", { clear = true }),
