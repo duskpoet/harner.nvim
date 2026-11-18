@@ -1,2 +1,5 @@
 .DS_Store
 doc/tags
+assets/demo-raw.mp4
+assets/demo.mp4
+__pycache__/
