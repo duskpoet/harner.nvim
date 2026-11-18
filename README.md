@@ -5,7 +5,7 @@
 Chat with [Claude Code](https://docs.claude.com/en/docs/claude-code) from a
 Neovim split, with Claude working *inside your editor* instead of next to it.
 
-![harner fixing a selected method, running the tests in auto mode and answering a follow-up with a table](assets/demo.gif)
+https://github.com/user-attachments/assets/127306c0-f5e7-402c-ac4b-859eef6e422b
 
 harner runs the `claude` CLI headless (`claude -p`) and gives it an MCP
 server that talks to the Neovim you are sitting in. Claude can then:
