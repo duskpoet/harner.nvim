@@ -109,7 +109,7 @@ Inside Neovim the same documentation is available as `:help harner`.
 | `<leader>hh`             | input popup for the current chat; in visual mode it attaches a reference to the selection |
 | `<leader>ht` / `:Harner` | toggle the chat split                                              |
 | `<leader>hn` / `:HarnerNew` | new chat (fresh Claude session; the old chat is kept)           |
-| `<leader>hl` / `:HarnerChats` | pick one of this nvim's chats to show                         |
+| `<leader>hl` / `:HarnerChats` | pick one of this nvim's chats to show, or a saved one from an earlier session in this directory |
 | `<leader>hx` / `:HarnerCancel` | cancel the running request (the current chat's, else the only running one) |
 | `<leader>ha` / `:HarnerAuto` | toggle auto mode (fewer confirms) for the current chat         |
 | `<leader>hm` / `:HarnerMinimize` | minimize / restore the open confirm float (`m` inside it), to read what it covers before answering |
@@ -312,6 +312,11 @@ require("harner").setup({
     allow = {},           -- extra bash prefixes that run without asking
     model = "haiku",      -- classifier model
     timeout = 15,         -- classifier seconds before falling back to asking
+  },
+  persist = {             -- chats saved per project (cwd), restored via :HarnerChats
+    enabled = true,
+    path = nil,           -- default stdpath("state")/harner/chats.json
+    max = 20,             -- chats kept per project, oldest dropped
   },
   decisions = {           -- decision log, :HarnerDecisions
     enabled = true,

@@ -252,6 +252,22 @@ All modules live in `lua/harner/`:
   wrapper, skipped when the call is no longer pending (cancel declines are
   not answers). `:HarnerDecisions` shows `summary()`. Planned next: feed
   recent answers to the classifier as few-shot examples.
+- `store.lua` — saved chats (`config.persist`, default
+  `stdpath("state")/harner/chats.json`, 0600, written via tmp + rename):
+  `{version, projects = {[cwd] = {{session_id, title, lines, updated}}}}`.
+  `chat.save(chat)` runs at the end of every run (`on_done`) and for all
+  chats on `VimLeavePre` (`save_all`, picks up drafts); it skips chats that
+  never ran and ones with a run in flight (mid-stream transcript). Filed
+  under `chat.cwd` (set at each send), because `claude --resume` only finds a
+  session from the cwd it ran in. `save` re-reads the file first, so two nvims
+  in one project only replace their own chats; each project keeps the `max`
+  newest. `:HarnerChats` lists open chats plus saved ones of the current cwd
+  that no open chat shows (by `session_id`); picking one calls
+  `chat.restore(entry)`: same session id, `started = true` (next send
+  resumes), transcript restored, auto mode / grants / context reset. No
+  auto-restore on startup; a session whose file Claude has deleted
+  resumes with an error. tests/helper.lua
+  points `persist.path` at a temp file.
 - `term.lua` — terminal integration (`config.terminal`, backend `"auto"`).
   The plugin only reports facts: `set_winbar` calls `update()`, `send_chat`
   `started()`, `on_done` `finished(cancelled, failed)` (failed: no result or `is_error`, sent as

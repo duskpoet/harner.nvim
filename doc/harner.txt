@@ -87,7 +87,9 @@ Quick start ~
                         chat is kept.
 
                                                                 *:HarnerChats*
-:HarnerChats            Pick one of this Neovim's chats to show.
+:HarnerChats            Pick one of this Neovim's chats to show, or a chat saved
+                       from an earlier session in the same directory (the next
+                       message resumes its Claude session).
 
                                                                *:HarnerCancel*
 :HarnerCancel           Cancel the running request: the current chat's, else
@@ -345,6 +347,11 @@ Defaults: >lua
         allow = {},           -- extra bash prefixes that run without asking
         model = "haiku",      -- classifier model
         timeout = 15,         -- classifier seconds before asking instead
+      },
+      persist = {             -- chats saved per project (cwd)
+        enabled = true,
+        path = nil,           -- stdpath("state")/harner/chats.json
+        max = 20,             -- chats kept per project
       },
       decisions = {
         enabled = true,

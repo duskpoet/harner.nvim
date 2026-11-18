@@ -140,6 +140,12 @@ M.config = {
 		enabled = true,
 		path = nil, ---@type string|nil default stdpath("state")/harner/decisions.jsonl
 	},
+	-- chats saved per project (cwd) so :HarnerChats can bring them back after a restart
+	persist = {
+		enabled = true,
+		path = nil, ---@type string|nil default stdpath("state")/harner/chats.json
+		max = 20, -- chats kept per project, oldest dropped
+	},
 	-- global normal-mode keymaps; set one to false to skip it
 	keys = {
 		group = "<leader>h", -- which-key group label, false to skip
@@ -237,6 +243,10 @@ function M.setup(opts)
 			local tools = package.loaded["harner.tools"]
 			if tools then
 				tools.kill_running(nil, true)
+			end
+			local chat = package.loaded["harner.chat"]
+			if chat then
+				chat.save_all()
 			end
 			local term = package.loaded["harner.term"]
 			if term then

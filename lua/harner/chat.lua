@@ -18,7 +18,9 @@ local SEP = string.rep("─", 40)
 ---@field lines string[]|nil transcript kept while detached
 ---@field stale_buf integer|nil detached buffer still to be wiped (its name is reused)
 ---@field session_id string
+---@field cwd string|nil directory the session last ran in (where it is saved under)
 ---@field started boolean
+---@field resumable boolean|nil a run reported a result, so the session exists on disk (saved chats only)
 ---@field title string|nil first line of the first prompt
 ---@field run HarnerRun|nil
 ---@field origin_win integer|nil
@@ -541,11 +543,12 @@ send_chat = function(chat, opts)
 	set_winbar(chat, "thinking…")
 
 	local runner = require("harner.runner")
+	chat.cwd = vim.fn.getcwd()
 	chat.run = runner.start({
 		prompt = prompt,
 		session_id = chat.session_id,
 		resume = chat.started,
-		cwd = vim.fn.getcwd(),
+		cwd = chat.cwd,
 		chat_id = chat.id,
 		on_text = function(text)
 			append_text(chat, text)
@@ -574,6 +577,8 @@ send_chat = function(chat, opts)
 		on_done = function(result)
 			chat.run = nil
 			chat.started = true
+			-- only a run that reported a result is known to have left a session to resume
+			chat.resumable = chat.resumable or result ~= nil
 			chat.tool_line = nil
 			require("harner.tools").cancel_chat("the request finished before the user answered", chat.id)
 			buf = buf_of(chat)
@@ -583,6 +588,7 @@ send_chat = function(chat, opts)
 			local cost = result and result.total_cost_usd
 			require("harner.term").finished(chat.cancelled, not result or result.is_error == true)
 			set_winbar(chat, cost and string.format("idle · $%.3f last", cost) or "idle")
+			M.save(chat)
 			local win = chat_win(chat)
 			if win and win == vim.api.nvim_get_current_win() then
 				vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(buf), 0 })
@@ -879,16 +885,92 @@ function M.label(chat)
 	)
 end
 
----Pick a chat and show it (`:HarnerChats`).
+---Save a chat that has run at least once (see store.lua). A run in flight
+---is skipped: its transcript is mid-stream, the save at its end covers it.
+---@param chat HarnerChat
+function M.save(chat)
+	local store = require("harner.store")
+	if not store.enabled() or not chat.resumable or chat.run or not chat.cwd then
+		return
+	end
+	local lines = chat.buf and vim.api.nvim_buf_is_valid(chat.buf) and vim.api.nvim_buf_get_lines(chat.buf, 0, -1, false)
+		or chat.lines
+	if not lines then
+		return
+	end
+	store.save(chat.cwd, { session_id = chat.session_id, title = chat.title, lines = lines })
+end
+
+---Save every chat (VimLeavePre): picks up drafts typed below the separator.
+function M.save_all()
+	for _, chat in pairs(M.chats) do
+		M.save(chat)
+	end
+end
+
+---Saved chats of this project that no open chat already shows.
+---@return table[]
+local function saved_chats()
+	local open = {}
+	for _, c in pairs(M.chats) do
+		open[c.session_id] = true
+	end
+	return vim.tbl_filter(function(e)
+		return not open[e.session_id]
+	end, require("harner.store").list())
+end
+
+---Bring a saved chat back: same session id (the next message resumes it),
+---transcript restored, auto mode and grants start from the defaults.
+---@param entry table an entry of store.list()
+---@return HarnerChat
+function M.restore(entry)
+	counter = counter + 1
+	local chat = {
+		id = counter,
+		session_id = entry.session_id,
+		cwd = vim.fn.getcwd(),
+		started = true,
+		resumable = true,
+		title = entry.title,
+		lines = entry.lines,
+		auto = require("harner").config.auto.enabled == true,
+	}
+	M.chats[chat.id] = chat
+	attach_buf(chat)
+	return chat
+end
+
+---Pick a chat and show it (`:HarnerChats`): the open ones, then the ones
+---saved for this project.
 function M.pick()
 	local items = M.list()
+	vim.list_extend(items, saved_chats())
 	if #items == 0 then
 		vim.notify("harner: no chats yet")
 		return
 	end
-	vim.ui.select(items, { prompt = "harner chats", format_item = M.label }, function(chat)
-		if chat and M.chats[chat.id] then
+	vim.ui.select(items, {
+		prompt = "harner chats",
+		format_item = function(item)
+			if item.id then
+				return M.label(item)
+			end
+			return string.format("saved %s  %s", os.date("%m-%d %H:%M", item.updated), item.title or "(empty)")
+		end,
+	}, function(chat)
+		if not chat then
+			return
+		end
+		local restored = not chat.id
+		if restored then
+			chat = M.restore(chat)
+		end
+		if M.chats[chat.id] then
 			show(chat, true)
+			if restored then
+				set_winbar(chat, "idle")
+			end
 		end
 	end)
 end
