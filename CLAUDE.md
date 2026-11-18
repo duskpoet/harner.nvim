@@ -233,7 +233,10 @@ All modules live in `lua/harner/`:
   command, description, cwd and `chat.last_prompt` on stdin. The prompt says
   read-only is ALLOW whatever the request (slash commands are skills it can't
   see) and only side effects may ASK; the reply may carry one reasoning line,
-  the verdict is the last non-empty line (`parse()`). `ALLOW` runs; `ASK: reason`, garbage,
+  the verdict is the last non-empty line (`parse()`); haiku also puts it first
+  with the reasoning below, or at the end of the reasoning line (`…step.
+  ALLOW`), about every second time, so when the last line is no verdict the
+  reply's only verdict line counts. `ALLOW` runs; `ASK: reason`, garbage,
   failure or timeout (`config.auto.timeout`) opens the confirm with the reason
   as `note` (a dimmed virt line). It never denies. `tools.auto_or_confirm`
   wires it in; the classifier answers after the handler returned, so it

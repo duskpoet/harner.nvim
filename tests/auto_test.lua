@@ -220,7 +220,14 @@ check(vim.deep_equal(parsed("ASK: `git worktree remove --force` deletes"), { fal
 check(vim.deep_equal(parsed("**ASK: remote write**"), { false, "remote write" }), "reason trims outer markup")
 local long = select(2, auto.parse(string.rep("a", 116) .. "—" .. string.rep("b", 20)))
 check(vim.fn.strtrans(long) == long and long:find("a—%.%.%.$"), "long no-verdict cut on a character: " .. long)
-check(not auto.parse("ALLOW\nmaybe not"), "trailing chatter is no verdict")
+-- haiku often answers verdict first, reasoning below: the only verdict line counts
+check(vim.deep_equal(parsed("ALLOW\nRunning the unit tests is a routine step.\n"), { true }), "parse verdict-first ALLOW")
+check(vim.deep_equal(parsed("ASK: pushes\nIt writes to the remote."), { false, "pushes" }), "parse verdict-first ASK")
+check(vim.deep_equal(parsed("Running the tests is a routine local step. ALLOW"), { true }), "parse ALLOW closing the reasoning line")
+check(vim.deep_equal(parsed("It pushes. ASK: remote write"), { false, "remote write" }), "parse ASK closing the reasoning line")
+check(not auto.parse("This one I would not ALLOW"), "ALLOW inside a sentence is no verdict")
+check(not auto.parse("ALLOW\nASK: on second thought\nit deletes files"), "two verdicts and trailing prose is no verdict")
+check(select(2, auto.parse("ALLOW\nASK: x\nit deletes files")):find("no verdict: it deletes files", 1, true), "...and keeps the last line")
 check(not auto.parse("ALLOWED if you like"), "ALLOW must stand alone")
 check(not auto.parse(""), "empty is no verdict")
 
