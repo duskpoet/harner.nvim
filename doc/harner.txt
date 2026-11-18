@@ -300,6 +300,11 @@ Defaults: >lua
         prefix = "",          -- string or function
         format = nil,         -- function(state, chat) -> string
       },
+      terminal = {            -- see |harner-terminal|
+        backend = "auto",     -- "auto" | "agterm" | false
+        info = true,          -- agterm: activity line under the row
+        agtermctl = "agtermctl",
+      },
       render = {
         enabled = true,       -- box tables, shade code, link URLs and
                               -- file:line references
@@ -353,6 +358,18 @@ Defaults: >lua
       },
     })
 <
+                                                             *harner-terminal*
+harner works the same in every terminal. `title` mirrors the chat state into
+the terminal title anywhere. Inside agterm (detected by itself when
+`agtermctl` is on PATH) the session's status glyph follows harner: `active`
+while a chat runs, `blocked` while a confirm or ask_user float waits,
+`completed` after a run until the session is visited (with a triangle glyph
+when the run failed), `idle` after a cancel
+or when nvim exits. `info` adds an activity line under the session row.
+agterm's own Claude status hooks are silenced for harner's `claude -p` so
+the two do not fight over the glyph; `terminal = { backend = false }` turns
+the integration off and leaves the hooks in charge.
+
 ==============================================================================
 10. EXTRA MCP SERVERS                                             *harner-mcp*
 

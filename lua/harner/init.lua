@@ -46,6 +46,17 @@ M.config = {
 		prefix = "", ---@type string|fun(): string
 		format = nil, ---@type fun(state: string, chat: table): string|nil
 	},
+	-- terminal integration: show what harner is doing (working, waiting for you,
+	-- finished) in the terminal hosting nvim. "auto" picks a backend when one
+	-- is detected and does nothing otherwise; false turns it off. Backends:
+	-- agterm (sidebar status glyph, plus `info`: an activity line under the
+	-- session row). While it is on, agterm's own Claude status hooks are
+	-- silenced for harner's claude, so only harner sets the indicator.
+	terminal = {
+		backend = "auto", ---@type "auto"|"agterm"|false
+		info = true,
+		agtermctl = "agtermctl", -- name on PATH or absolute path
+	},
 	-- chat transcript decorations: aligned box tables, shaded code blocks,
 	-- highlighted URLs and `file.lua:12` references (`gf` follows them), and
 	-- 'conceallevel' 2 so markdown markup (`**`, backticks, link targets) hides
@@ -200,6 +211,10 @@ function M.setup(opts)
 			local tools = package.loaded["harner.tools"]
 			if tools then
 				tools.kill_running(nil, true)
+			end
+			local term = package.loaded["harner.term"]
+			if term then
+				term.leave()
 			end
 		end,
 	})

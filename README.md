@@ -42,6 +42,7 @@ work side by side.
 - [Configuration](#configuration)
 - [Extra MCP servers](#extra-mcp-servers)
 - [Highlight groups](#highlight-groups)
+- [Terminal integration](#terminal-integration)
 - [Troubleshooting](#troubleshooting)
 - [How it works](#how-it-works)
 - [Development](#development)
@@ -267,6 +268,11 @@ require("harner").setup({
     prefix = "",          -- string or function, e.g. the ssh/dtach session the editor runs in
     format = nil,         -- function(state, chat) -> string, replaces the whole title (prefix ignored)
   },
+  terminal = {
+    backend = "auto",     -- "auto" | "agterm" | false: show harner's state in the hosting terminal, see below
+    info = true,          -- agterm: activity line under the session row
+    agtermctl = "agtermctl", -- name on PATH or absolute path
+  },
   render = {
     enabled = true,       -- decorate the transcript: box tables, shaded code, URL / file:line links (`gf` follows)
     conceal = true,       -- 'conceallevel' 2: hide `**`, backticks, fences, link targets off the cursor line
@@ -381,6 +387,34 @@ The transcript uses `HarnerCodeBlock`, `HarnerCodeLang`, `HarnerToolNote`,
 `HarnerUrl` and `HarnerFileRef`. If your `NormalFloat` matches `Normal`,
 give `HarnerConfirmNormal` a distinct background so confirms stand out.
 
+## Terminal integration
+
+harner works the same in every terminal. Two things are optional extras:
+
+- **Title** (any terminal): `title = { enabled = true }` mirrors the chat
+  state into the terminal title.
+- **agterm**: detected by itself
+  (`terminal.backend = "auto"`) when nvim runs in an agterm pane and
+  `agtermctl` is on `PATH`. The session's status glyph then follows harner:
+
+  | harner                               | agterm status             |
+  | ------------------------------------ | ------------------------- |
+  | a chat is running                    | `active`                  |
+  | a confirm or `ask_user` float waits  | `blocked`                 |
+  | the last run ended                   | `completed` (until visited) |
+  | the last run failed                  | `completed`, triangle glyph |
+  | cancelled, or nvim exits mid-run     | `idle`                    |
+
+  The row also gets an activity line (`harner #1 running Grep`), which
+  expires by itself if nvim dies. Several chats count as one session:
+  `blocked` wins over `active`, which wins over `completed`.
+
+  If you installed agterm's Claude status hooks, they stay as they are for
+  interactive `claude`. For harner's own `claude -p` they are silenced
+  (it runs with an empty `AGTERM_SESSION_ID`), since the two would fight
+  over the same glyph. `terminal = { backend = false }` turns the
+  integration off and leaves the hooks in charge.
+
 ## Troubleshooting
 
 - **No `:Harner` command or keys.** `setup()` was not called: the lazy.nvim
@@ -427,6 +461,7 @@ nvim --headless -u NONE -l tests/confirm_test.lua  # confirm float, grants, wind
 nvim --headless -u NONE -l tests/bash_test.lua     # opt-in shell tool, allow-list, timeout, cancel
 nvim --headless -u NONE -l tests/auto_test.lua     # auto mode rules and classifier
 nvim --headless -u NONE -l tests/runner_test.lua   # stream parsing against a fake claude
+nvim --headless -u NONE -l tests/term_test.lua     # terminal status against a fake agtermctl
 ```
 
 A failing test exits non-zero; CI (`.github/workflows/test.yml`) runs them on

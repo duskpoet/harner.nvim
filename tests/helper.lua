@@ -9,6 +9,8 @@ vim.opt.rtp:prepend(M.root)
 -- keep the decision log out of the user's state dir (setup() deep-extends, so this survives)
 M.decisions = vim.fn.tempname() .. "-decisions.jsonl"
 require("harner").config.decisions.path = M.decisions
+-- tests run inside a real terminal: never paint its status (term_test opts back in)
+require("harner").config.terminal.backend = false
 
 M.fails = 0
 

@@ -668,7 +668,10 @@ ask = function(opts, cb, id)
 	local is_input = opts.input == true
 	local open = is_input and confirm.input or confirm.ask
 	opts.input = nil
+	-- the terminal shows "waiting for the user" while a float is open or queued
+	local term = require("harner.term")
 	local close = open_queued(open, opts, in_chat(cid, function(choice, index)
+		term.update()
 		if id then
 			asking[id] = nil
 		end
@@ -687,6 +690,12 @@ ask = function(opts, cb, id)
 	if id and close then
 		asking[id] = close
 	end
+	term.update()
+end
+
+---True while a confirm or ask_user float is open (also minimized) or queued.
+function M.asking()
+	return showing ~= nil or #queue > 0
 end
 
 -- Approvals granted with `a` in a confirm, per chat session (a new chat starts

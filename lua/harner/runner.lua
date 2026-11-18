@@ -213,7 +213,7 @@ function M.start(opts)
 				table.insert(stderr, data)
 			end
 		end,
-		env = { HARNER_NVIM = mcp.server_address() },
+		env = vim.tbl_extend("force", require("harner.term").env(), { HARNER_NVIM = mcp.server_address() }),
 	}, function(obj)
 		vim.schedule(function()
 			os.remove(mcp_path)

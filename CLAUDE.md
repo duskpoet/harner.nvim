@@ -252,6 +252,28 @@ All modules live in `lua/harner/`:
   wrapper, skipped when the call is no longer pending (cancel declines are
   not answers). `:HarnerDecisions` shows `summary()`. Planned next: feed
   recent answers to the classifier as few-shot examples.
+- `term.lua` — terminal integration (`config.terminal`, backend `"auto"`).
+  The plugin only reports facts: `set_winbar` calls `update()`, `send_chat`
+  `started()`, `on_done` `finished(cancelled, failed)` (failed: no result or `is_error`, sent as
+  `completed --shape triangle` since agterm has no error status), the `ask` wrapper in tools
+  `update()` when a float is queued or answered. `compute()` aggregates over
+  all chats (blocked while `tools.asking()`, a float open or queued, > active while any run > `completed` since the last start >
+  idle) and `pump()` sends what changed through one serialized `vim.system`
+  queue, status before info, coalesced per main-loop tick. No backend means
+  every call is a no-op. The only backend is agterm (`AGTERM_ENABLED=1`,
+  `AGTERM_SESSION_ID`, executable `agtermctl`): `session status <state>
+  --target <sid> [--socket] [--pane] [--pane-id]` (`--blink` for active /
+  blocked, `--auto-reset` for completed, re-sent on every finish because
+  agterm resets it on visit) and `session info <text> --hide-after 45`,
+  refreshed every 20 s so it expires if nvim dies. `env()` gives the runner
+  `AGTERM_SESSION_ID=""`: agterm's Claude hooks in the user settings fire
+  under `-p` and would paint the same glyph (wrong for overlapping chats,
+  confirms and cancels); their script exits on an empty id. `leave()`
+  (VimLeavePre) resets synchronously. tests/helper.lua pins `backend =
+  false` so tests run inside agterm never touch the real row. Planned next:
+  an `osc` backend (OSC 9/777/99 notifications for other terminals and
+  ssh/dtach sessions) and a `show_page` tool (agterm overlay, else
+  `vim.ui.open`).
 - `tools.lua` — `M.tools[name] = {description, inputSchema, handler, async?}`.
   `list()` and `call(name, args)` are what the bridge invokes. Sync handlers
   return a string; errors become `isError = true` results. Async handlers
@@ -482,6 +504,10 @@ nvim --headless -u NONE -l tests/auto_test.lua
 # runner + chat against a fake `claude` shell script replaying stream events:
 # tool note summaries, cost in the winbar, missing-binary error (offline)
 nvim --headless -u NONE -l tests/runner_test.lua
+
+# terminal status: no backend outside agterm, active / completed / blocked /
+# idle against a fake `agtermctl`, empty AGTERM_SESSION_ID for claude, leave
+nvim --headless -u NONE -l tests/term_test.lua
 
 # full loop against the real claude CLI: three messages, later ones resume (~2 min, costs money)
 nvim --headless -u NONE -l tests/chat_test.lua

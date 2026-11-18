@@ -224,6 +224,7 @@ local function set_winbar(chat, state)
 		-- 'titlestring' is evaluated like 'statusline' when it contains '%'
 		vim.o.titlestring = text:gsub("%%", "%%%%")
 	end
+	require("harner.term").update()
 end
 
 ---Redraw the winbar with its current state (after toggling auto mode).
@@ -533,6 +534,7 @@ send_chat = function(chat, opts)
 		vim.cmd("stopinsert")
 	end
 	scroll_to_end(chat)
+	require("harner.term").started()
 	set_winbar(chat, "thinking…")
 
 	local runner = require("harner.runner")
@@ -576,6 +578,7 @@ send_chat = function(chat, opts)
 			local last = vim.api.nvim_buf_get_lines(buf, n - 1, n, false)[1] or ""
 			append_lines(chat, last == "" and { SEP, "" } or { "", SEP, "" })
 			local cost = result and result.total_cost_usd
+			require("harner.term").finished(chat.cancelled, not result or result.is_error == true)
 			set_winbar(chat, cost and string.format("idle · $%.3f last", cost) or "idle")
 			local win = chat_win(chat)
 			if win and win == vim.api.nvim_get_current_win() then
