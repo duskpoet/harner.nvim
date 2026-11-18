@@ -324,6 +324,9 @@ local function tool_summary(name, input)
 				s = s .. "-" .. input.end_line
 			end
 		end
+	elseif n == "nvim:show_page" then
+		s = type(input.url) == "string" and input.url
+			or (type(input.path) == "string" and vim.fn.fnamemodify(input.path, ":t") or nil)
 	elseif n == "nvim:edit_file" or n == "nvim:write_file" or n == "nvim:save_file" then
 		local paths = {}
 		if type(input.path) == "string" then

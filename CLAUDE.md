@@ -292,7 +292,13 @@ All modules live in `lua/harner/`:
   BEL goes as it is). `M.send` writes it: `nvim_ui_send` where it exists,
   else `nvim_chan_send(2, …)`, and only when a UI with `stdout_tty` is
   attached (headless and GUIs get nothing); notify_test replaces it.
-  Planned next: a `show_page` tool (agterm overlay, else `vim.ui.open`).
+  `M.show_page(kind, what, opts, cb)` is the backend half of the show_page
+  tool: false without a backend, else `agtermctl session overlay open
+  --markdown|--html|--image|--text|--url <what>` (`--navigation` for
+  markdown and URLs, `--cwd <dir>` for HTML so the page reads beside itself,
+  `--line` for text, `--size-percent` from `config.show_page.size` except
+  for pictures, which size themselves; no `--js`, no `--pane`) and `cb(ok,
+  err)` with stderr on a non-zero exit.
 - `tools.lua` — `M.tools[name] = {description, inputSchema, handler, async?}`.
   `list()` and `call(name, args)` are what the bridge invokes. Sync handlers
   return a string; errors become `isError = true` results. Async handlers
@@ -303,7 +309,8 @@ All modules live in `lua/harner/`:
   waiting calls with an error (chat cancel and run end both call it).
   Every finished nvim tool calls `chat.on_tool_done(name)`.
 
-Tools today: `show_text`, `open_file` (display); `get_current_buffer`,
+Tools today: `show_text`, `open_file`, `show_page` (display; `show_page` is
+async because it waits for `agtermctl`); `get_current_buffer`,
 `get_cursor`, `get_selection`, `list_buffers`, `get_diagnostics` (read
 context); `ask_user`, `run_command`, `write_file`, `save_file`, `edit_file`
 (async, may wait on the user; `edit_file` resolves at once unless it asks);
@@ -384,6 +391,23 @@ cursor leaves the range. `run_command` runs an Ex command with
 `config.run_command.allow` (whole-word prefix match, e.g. `Git log`) or
 granted for the chat, the user confirms through `confirm.lua`. `config.run_command.confirm
 = false` skips the prompt for everything.
+
+`show_page` (`path` or `url`, `line`) shows something rendered. The kind
+comes from the extension through the closed `PAGE_KINDS` table (markdown,
+html, image), everything else is text (a NUL in the first 8000 bytes is
+refused as binary); URLs must be http(s) without whitespace. With the agterm
+backend it is `term.show_page` (an overlay). Without one, pages and URLs go
+to `vim.ui.open` and text to `show_range` like `open_file`. The table is
+closed because `vim.ui.open` runs what it is given (`open x.command`): a
+script Claude wrote must never get there, and page_test checks that. Files
+and the overlay are unasked; a URL going to `vim.ui.open` always confirms
+first (`grants().browser`, `a` for the chat; never automated): the user's
+browser carries their logins, which WebFetch and the overlay's in-memory
+store do not. `vim.ui.open` only fails at once when no opener exists, so
+`open()` polls the returned process for up to 2 s and reports a non-zero
+exit (`xdg-open` over ssh without a display) as the error; one still
+running counts as opened. Over ssh the opener acts on the remote machine.
+`ask` and `grants` are forward-declared above `PAGE_KINDS` for this.
 
 Tool notes in the transcript are `_→ nvim:show_text_` on `content_block_start`
 and get amended to `_→ nvim:show_text · <summary>_` when the input arrives
@@ -531,6 +555,10 @@ nvim --headless -u NONE -l tests/term_test.lua
 # notifications: escape per terminal, focus gate, events, tmux wrapping,
 # silence next to the agterm backend (term.send replaced)
 nvim --headless -u NONE -l tests/notify_test.lua
+
+# show_page: overlay command per kind against a fake `agtermctl`, fallbacks
+# (stubbed vim.ui.open, text in the editor), refused URLs / binaries / scripts
+nvim --headless -u NONE -l tests/page_test.lua
 
 # full loop against the real claude CLI: three messages, later ones resume (~2 min, costs money)
 nvim --headless -u NONE -l tests/chat_test.lua

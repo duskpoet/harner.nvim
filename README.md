@@ -144,7 +144,9 @@ can run at once; each one's tools act on the window it was asked from.
 - read: `get_current_buffer`, `get_cursor`, `get_selection`, `list_buffers`,
   `get_diagnostics`
 - display: `show_text` (scratch window with a filetype, `q` closes it),
-  `open_file` (jump to a file and highlight a line range)
+  `open_file` (jump to a file and highlight a line range), `show_page` (a
+  markdown or HTML file, a picture or an http(s) URL, rendered: an overlay
+  in agterm, the system viewer elsewhere)
 - change: `edit_file` (str_replace-style edit applied to the buffer, unsaved
   and undoable), `write_file` and `save_file` (disk writes, unasked except outside the
   working directory, `.git/`, `.claude/` and files that run code when loaded;
@@ -262,6 +264,9 @@ require("harner").setup({
   show_text = {
     mode = "split",       -- "split" | "vsplit" | "float"
     float_width = 100,
+  },
+  show_page = {
+    size = 90,            -- agterm overlay: percent of the session
   },
   title = {
     enabled = false,      -- mirror the chat state into the terminal title ('titlestring')
@@ -444,6 +449,18 @@ harner works the same in every terminal. Three things are optional extras:
   over the same glyph. `terminal = { backend = false }` turns the
   integration off and leaves the hooks in charge.
 
+  `show_page` uses the same backend: markdown, HTML, pictures, URLs and
+  text files open in an overlay floating over the session
+  (`show_page.size` percent of it; HTML runs no scripts).
+
+Without agterm `show_page` hands markdown, HTML, pictures (png, jpg, gif,
+webp) and http(s) URLs to `vim.ui.open`, so they open in your system viewer
+or browser on the machine nvim runs on, and shows any other text file in the
+editor like `open_file`. A URL asks first (your browser carries your
+logins; `a` stops asking for the chat), and an opener that fails, such as
+`xdg-open` over ssh, is reported as an error. Nothing else ever reaches `vim.ui.open`: it would
+run a script or an app instead of showing it.
+
 ## Troubleshooting
 
 - **No `:Harner` command or keys.** `setup()` was not called: the lazy.nvim
@@ -492,6 +509,7 @@ nvim --headless -u NONE -l tests/auto_test.lua     # auto mode rules and classif
 nvim --headless -u NONE -l tests/runner_test.lua   # stream parsing against a fake claude
 nvim --headless -u NONE -l tests/term_test.lua     # terminal status against a fake agtermctl
 nvim --headless -u NONE -l tests/notify_test.lua   # notification escapes per terminal, focus gate
+nvim --headless -u NONE -l tests/page_test.lua     # show_page: overlay per kind, fallbacks, refusals
 ```
 
 A failing test exits non-zero; CI (`.github/workflows/test.yml`) runs them on

@@ -341,6 +341,46 @@ function M.finished(cancelled, failed)
 	M.update(true)
 end
 
+---Show a page (the show_page tool) in the hosting terminal: an agterm overlay
+---over the session, floating at `opts.size` percent (a picture sizes itself).
+---@param kind "markdown"|"html"|"image"|"text"|"url"
+---@param what string absolute file path, or the URL
+---@param opts { line?: integer, size?: integer }
+---@param cb fun(ok: boolean, err: string) called on the main loop
+---@return boolean handled false: no terminal that can, nothing was started
+function M.show_page(kind, what, opts, cb)
+	local b = detect()
+	if not b then
+		return false
+	end
+	local argv = { b.ctl, "session", "overlay", "open", "--" .. kind, what }
+	if kind == "html" then
+		-- the page may read beside itself (its css, pictures); scripts stay off
+		vim.list_extend(argv, { "--cwd", vim.fs.dirname(what) })
+	elseif kind == "url" or kind == "markdown" then
+		table.insert(argv, "--navigation")
+	elseif kind == "text" and opts.line then
+		vim.list_extend(argv, { "--line", tostring(opts.line) })
+	end
+	if kind ~= "image" then
+		local size = math.max(10, math.min(100, math.floor(tonumber(opts.size) or 90)))
+		vim.list_extend(argv, { "--size-percent", tostring(size) })
+	end
+	vim.list_extend(argv, b.target)
+	local ok, err = pcall(vim.system, argv, { text = true, timeout = 10000 }, function(r)
+		vim.schedule(function()
+			local out = vim.trim((r.stderr or "") ~= "" and r.stderr or r.stdout or "")
+			cb(r.code == 0, out ~= "" and out or ("agtermctl exited with code " .. r.code))
+		end)
+	end)
+	if not ok then
+		vim.schedule(function()
+			cb(false, tostring(err))
+		end)
+	end
+	return true
+end
+
 ---Environment for the `claude -p` a run spawns. Terminal agent-status hooks
 ---in the user's Claude settings would paint the same indicator as this module
 ---(and get overlapping chats, confirms and cancels wrong), so they are

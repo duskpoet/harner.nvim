@@ -165,6 +165,8 @@ Read ~
 Display ~
     `show_text`     scratch window with a filetype, `q` closes it
     `open_file`     jump to a file and highlight a line range
+    `show_page`     a markdown or HTML file, a picture or an http(s) URL,
+                    rendered: an overlay in agterm, else the system viewer
 
 Change ~
     `edit_file`     str_replace-style edit applied to the buffer, unsaved
@@ -295,6 +297,9 @@ Defaults: >lua
         mode = "split",       -- "split" | "vsplit" | "float"
         float_width = 100,
       },
+      show_page = {
+        size = 90,            -- agterm overlay: percent of the session
+      },
       title = {
         enabled = false,      -- mirror the chat state into 'titlestring'
         prefix = "",          -- string or function
@@ -386,6 +391,14 @@ or when nvim exits. `info` adds an activity line under the session row.
 agterm's own Claude status hooks are silenced for harner's `claude -p` so
 the two do not fight over the glyph; `terminal = { backend = false }` turns
 the integration off and leaves the hooks in charge.
+
+`show_page` opens an overlay over the session inside agterm (`show_page.size`
+percent; HTML runs no scripts). Elsewhere markdown, HTML, pictures (png, jpg,
+gif, webp) and http(s) URLs go to |vim.ui.open()| on the machine nvim runs
+on, and any other text file is shown in the editor like `open_file`. A URL
+asks first (your browser carries your logins; `a` stops asking for the chat)
+and an opener that fails, such as `xdg-open` over ssh, is an error. Nothing
+else reaches `vim.ui.open`, which would run a script instead of showing it.
 
 ==============================================================================
 10. EXTRA MCP SERVERS                                             *harner-mcp*

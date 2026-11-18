@@ -352,6 +352,149 @@ M.tools.open_file = {
 	end,
 }
 
+local ask -- opens a confirm float filed under the running call, defined below
+local grants -- the chat's `a` approvals, defined below
+
+-- File kinds show_page hands to a viewer, by extension. Everything else is
+-- shown as text. The list is closed on purpose: outside agterm these go to
+-- `vim.ui.open`, which would *run* a `.command`, script or app bundle.
+local PAGE_KINDS = {
+	md = "markdown",
+	markdown = "markdown",
+	html = "html",
+	htm = "html",
+	png = "image",
+	jpg = "image",
+	jpeg = "image",
+	gif = "image",
+	webp = "image",
+}
+
+---@param path string
+local function looks_binary(path)
+	local f = io.open(path, "rb")
+	if not f then
+		return false
+	end
+	local head = f:read(8000) or ""
+	f:close()
+	return head:find("\0", 1, true) ~= nil
+end
+
+M.tools.show_page = {
+	description = "Show a rendered page to the user: a markdown or HTML file, a picture (png, jpg, gif, webp) or an "
+		.. "http(s) URL. Inside the agterm terminal it opens as an overlay over the editor, elsewhere in the system "
+		.. "viewer or browser. Any other text file is shown read-only at `line` (in the editor when there is no overlay). "
+		.. "Use it for documents and pictures the user should look at rendered; use show_text for snippets and "
+		.. "open_file to point at code. Give either `path` or `url`.",
+	inputSchema = schema({
+		path = { type = "string", description = "File path, absolute or relative to the working directory" },
+		url = { type = "string", description = "http or https URL to show instead of a file" },
+		line = { type = "integer", description = "For text files: 1-based line to scroll to and mark" },
+	}, {}),
+	async = true,
+	handler = function(args, resolve)
+		local url = type(args.url) == "string" and args.url ~= "" and args.url or nil
+		local has_path = type(args.path) == "string" and args.path ~= ""
+		if (url ~= nil) == has_path then
+			error("give either path or url", 0)
+		end
+		local kind, what, label
+		if url then
+			if not url:match("^https?://[%w%[]") or url:find("[%s%c]") then
+				error("only http and https URLs can be shown", 0)
+			end
+			kind, what, label = "url", url, url
+		else
+			local path, err = resolve_path(args.path)
+			if not path then
+				error(err, 0)
+			end
+			kind = PAGE_KINDS[(path:match("%.(%w+)$") or ""):lower()] or "text"
+			if kind == "text" and looks_binary(path) then
+				error("cannot show a binary file (markdown, HTML, png/jpg/gif/webp or text only): " .. path, 0)
+			end
+			what, label = path, vim.fn.fnamemodify(path, ":.")
+		end
+		local line = kind == "text" and tonumber(args.line) or nil
+		local size = (require("harner").config.show_page or {}).size
+		local overlay = require("harner.term").show_page(kind, what, { line = line, size = size }, function(ok, err)
+			if ok then
+				resolve(("Showing %s in a terminal overlay."):format(label))
+			else
+				resolve(("could not open the overlay for %s: %s"):format(label, err), true)
+			end
+		end)
+		if overlay then
+			return
+		end
+		if kind == "text" then
+			local first = show_range(load_buf(what), line or 1, line or 1)
+			resolve(("Opened %s at line %d in the editor."):format(label, first))
+			return
+		end
+		local function open()
+			local proc, err = vim.ui.open(what)
+			if err or not proc then
+				resolve(("could not open %s: %s"):format(label, err or "no opener"), true)
+				return
+			end
+			local function opened()
+				resolve(("Opened %s with the system %s."):format(label, kind == "url" and "browser" or "viewer"))
+			end
+			if type(proc.is_closing) ~= "function" then
+				opened()
+				return
+			end
+			-- the opener exists but may still fail (xdg-open over ssh has no
+			-- display): give it 2 s to say so; one still running has opened
+			local tries = 0
+			local function check()
+				if not proc:is_closing() then
+					tries = tries + 1
+					if tries >= 40 then
+						opened()
+					else
+						vim.defer_fn(check, 50)
+					end
+					return
+				end
+				local ok, r = pcall(proc.wait, proc, 100)
+				if ok and type(r) == "table" and r.code ~= 0 then
+					local out = vim.trim(r.stderr or "")
+					out = out ~= "" and out or ("the system opener exited with code " .. tostring(r.code))
+					resolve(("could not open %s: %s"):format(label, out), true)
+				else
+					opened()
+				end
+			end
+			check()
+		end
+		-- the user's own browser carries their logins: a URL goes there only
+		-- when they say so (the overlay above has a store of its own)
+		if kind ~= "url" or grants().browser then
+			open()
+			return
+		end
+		ask({
+			title = "harner: Claude wants to open in your browser",
+			body = { what },
+			yes = "open",
+			always = "open every URL in this chat",
+			log = { tool = "show_page", subject = what },
+		}, function(choice)
+			if choice == "always" then
+				grants().browser = true
+			end
+			if choice ~= "no" then
+				open()
+			else
+				resolve("The user declined to open " .. label .. ".", true)
+			end
+		end)
+	end,
+}
+
 M.tools.get_current_buffer = {
 	description = "Return the file path, filetype, cursor position and full contents of the buffer the user is "
 		.. "working in (the window next to the chat).",
@@ -504,7 +647,6 @@ M.tools.get_diagnostics = {
 	end,
 }
 
-local ask -- opens a confirm float filed under the running call, defined below
 local in_chat -- runs a callback for the chat its call came from, defined below
 
 M.tools.ask_user = {
@@ -701,12 +843,12 @@ end
 -- Approvals granted with `a` in a confirm, per chat session (a new chat starts
 -- asking again). Without a chat (tests) they live here.
 local function new_grants()
-	return { writes = false, commands = {}, shell = {} }
+	return { writes = false, commands = {}, shell = {}, browser = false }
 end
 local fallback_grants = new_grants()
 
----@return { writes: boolean, commands: table<string, true>, shell: table<string, true> }
-local function grants()
+---@return { writes: boolean, commands: table<string, true>, shell: table<string, true>, browser: boolean }
+grants = function()
 	local c = require("harner.chat").active()
 	if not c then
 		return fallback_grants

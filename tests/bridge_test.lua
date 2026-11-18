@@ -132,7 +132,7 @@ local function is_err(id) local r = replies[id]; return r and r.result and r.res
 check(done, "bridge exited")
 check(replies[1] and replies[1].result.serverInfo ~= nil, "initialize answered")
 local names = vim.tbl_map(function(t) return t.name end, replies[2].result.tools)
-check(vim.deep_equal(names, { "ask_user", "edit_file", "get_current_buffer", "get_cursor", "get_diagnostics", "get_selection", "list_buffers", "open_file", "run_command", "save_file", "show_text", "write_file" }), "tools/list names: " .. table.concat(names, ","))
+check(vim.deep_equal(names, { "ask_user", "edit_file", "get_current_buffer", "get_cursor", "get_diagnostics", "get_selection", "list_buffers", "open_file", "run_command", "save_file", "show_page", "show_text", "write_file" }), "tools/list names: " .. table.concat(names, ","))
 check(text(3):find("Displayed 2 lines", 1, true) ~= nil and not is_err(3), "show_text: " .. text(3))
 check(is_err(4) and text(4):find("unknown tool", 1, true), "unknown tool is an error result")
 check(replies[5] and replies[5].error and replies[5].error.code == -32601, "unknown method is a jsonrpc error")

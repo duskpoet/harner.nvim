@@ -34,6 +34,12 @@ M.config = {
 		mode = "split", ---@type "split"|"vsplit"|"float"
 		float_width = 100,
 	},
+	-- show_page: rendered markdown / HTML / pictures / URLs. Inside agterm (see
+	-- `terminal`) an overlay floating at `size` percent of the session, else
+	-- the system viewer (`vim.ui.open`).
+	show_page = {
+		size = 90,
+	},
 	-- terminal title: mirror the chat state ("thinking…", "running Grep", "idle")
 	-- into 'titlestring' so the terminal tab shows what Claude is doing. Works
 	-- through ssh/dtach since nvim emits a plain OSC 2. `prefix` is a string or
