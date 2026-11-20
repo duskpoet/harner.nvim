@@ -238,7 +238,12 @@ All modules live in `lua/harner/`:
   may write: inside the real cwd, not `.git/` or `.claude/`). Hard
   (`.nvim.lua`/`.nvimrc`/`.exrc`/`.lazy.lua`/`.envrc`, a `.git` file, any
   `hooks/` or `config` below a `.git` part, anything below a `.claude` part
-  except files in `projects/<x>/memory/`, `~/.claude.json`) always asks; the other flagged writes go
+  except files in `projects/<x>/memory/`, `~/.claude.json`) always asks;
+  below a user-listed `config.write_file.allow` dir (`write_allowed()`,
+  whole components after `real()`, nothing with a `.git` part) a write counts
+  as a project file, only `CLAUDE_FILES` (`SKILL.md`, `CLAUDE.md`,
+  `settings*.json`, `.mcp.json`, `hooks.json`) and the code files stay hard;
+  the other flagged writes go
   to the classifier in auto mode (`details` = content, or `save_diff()` for
   save_file) and ask with auto off. Unflagged writes only ask with
   `write_file.confirm = true` and auto off. `bash_ok(cmd)` runs
@@ -254,7 +259,10 @@ All modules live in `lua/harner/`:
   setting sources so CLAUDE.md files don't leak into the verdict;
   `auth_settings()` carries the user settings' `env` over as process env and
   `apiKeyHelper`/`aws*`/`gcpAuthRefresh` via `--settings`) with the
-  command, description, cwd and `chat.last_prompt` on stdin. The prompt says
+  command, description, cwd and `chat.last_prompt` on stdin. The system
+  prompt is `system_prompt()`: `SYSTEM`, then the user's `config.auto.policy`
+  rules (string or list, framed as overriding the defaults), then the reply
+  format line last. The prompt says
   read-only is ALLOW whatever the request (slash commands are skills it can't
   see) and only side effects may ASK; the reply may carry one reasoning line,
   the verdict is the last non-empty line (`parse()`); haiku also puts it first

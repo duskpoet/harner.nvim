@@ -210,7 +210,11 @@ still apply first. Beyond them:
   worktrees included),
   everything under a `.claude/` dir (project or `~`: settings, hooks and
   their scripts, plugins) except memory notes in `projects/<x>/memory/`, and
-  `~/.claude.json`;
+  `~/.claude.json`. Directories you list in `write_file.allow` (e.g. a
+  skill's data dir, `~/.claude/skills/pr-review/reviews`) count as project
+  files, so writes there don't ask, except `SKILL.md`, `CLAUDE.md`,
+  `settings*.json`, `.mcp.json`, `hooks.json`, the files above that run code,
+  and anything under `.git/`;
 - a built-in list of read-only shell commands runs without asking (`git
   status|log|diff|show|blame`, read-only `git branch`, `ls`, `pwd`, `rg`, and
   `cat|head|tail|wc` on paths inside the working directory), plus your
@@ -221,7 +225,11 @@ still apply first. Beyond them:
   (`claude -p --model haiku`, no tools) that sees the command, Claude's
   description and your latest message. It either lets the call run or opens
   the normal confirm with its reason under the command. It never refuses on
-  its own; an error or a timeout (`auto.timeout`, 15 s) asks you;
+  its own; an error or a timeout (`auto.timeout`, 15 s) asks you.
+  `auto.policy` (a string or a list) adds your own rules to its prompt for
+  side effects you are fine with, e.g. `"Launching the Cursor CLI (agent -p
+  --mode ask) to review a diff or PR is allowed."`; the rest of the command
+  is still judged by the defaults;
 - `edit_file`'s save/drop question over your own unsaved changes always asks.
 
 Calls that ran unasked are marked in the transcript, e.g.
@@ -230,7 +238,8 @@ Calls that ran unasked are marked in the transcript, e.g.
 Every decision (rule, classifier, or your answer to a confirm) is appended
 to `decisions.path` (default `stdpath("state")/harner/decisions.jsonl`).
 `:HarnerDecisions` summarises it by tool and command, so you can see what
-still asks and add `auto.allow` entries for it.
+still asks and add `auto.allow`, `auto.policy` or `write_file.allow`
+entries for it.
 
 ## Security
 
@@ -305,6 +314,7 @@ require("harner").setup({
   write_file = {
     confirm = false,      -- true: ask before every write_file / save_file (auto mode off);
                           -- outside cwd, .git/, .claude/, .nvim.lua & co. always ask
+    allow = {},           -- dirs written like project files (not SKILL.md, settings, .git/)
   },
   bash = {
     enabled = false,      -- opt-in shell tool
@@ -320,6 +330,7 @@ require("harner").setup({
     allow = {},           -- extra bash prefixes that run without asking
     model = "haiku",      -- classifier model
     timeout = 15,         -- classifier seconds before falling back to asking
+    policy = nil,         -- your rules for the classifier (string or list)
   },
   persist = {             -- chats saved per project (cwd), restored via :HarnerChats
     enabled = true,

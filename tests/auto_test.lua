@@ -139,6 +139,23 @@ check(why and not soft, "memory note is classified, not hard")
 vim.uv.fs_symlink("/tmp", proj .. "/link")
 check(auto.write_blocker(proj .. "/link/x.txt") ~= nil, "symlink out of cwd refused")
 
+-- write_file.allow: the user's own dirs count as project files
+local skills = home .. "/.claude/skills/harner-test-" .. vim.fn.getpid()
+harner.config.write_file.allow = { skills .. "/reviews/", "relative/dir", "/" }
+check(auto.write_blocker(skills .. "/reviews/pr-1.md") == nil, "allowed dir under .claude is written unasked")
+check(auto.write_blocker(skills .. "/reviews/sub/x.json") == nil, "allowed dir covers subdirs")
+check(auto.write_blocker(skills .. "/reviews/../run.sh") ~= nil, ".. out of the allowed dir is not allowed")
+check(auto.write_blocker(skills .. "/reviews2/x.md") ~= nil, "allow matches whole components")
+check(auto.write_blocker("/tmp/elsewhere.txt") ~= nil, "relative and root entries ignored")
+for _, f in ipairs({ "SKILL.md", "settings.json", ".mcp.json", ".envrc", "sub/.nvim.lua" }) do
+  local _, hard = auto.write_blocker(skills .. "/reviews/" .. f)
+  check(hard, "allowed dir still hard for " .. f)
+end
+check(auto.write_blocker(skills .. "/reviews/.git/info/exclude") ~= nil, ".git inside an allowed dir still asks")
+harner.config.write_file.allow = { "~/.claude/skills/harner-test-" .. vim.fn.getpid() .. "/reviews" }
+check(auto.write_blocker(skills .. "/reviews/pr-2.md") == nil, "~ is expanded in allow entries")
+harner.config.write_file.allow = {}
+
 -- write_file in auto mode: no prompt inside, marked; prompt for .nvim.lua
 note("_→ nvim:write_file · a.txt_")
 local txt, err = call("write_file", { path = "a.txt", content = "hi\n" })
@@ -205,6 +222,24 @@ for _, s in ipairs({ "sed without -i", "awk without system()", "find without -de
   "as long as every command inside them only reads" }) do
   check(sys:find(s, 1, true), "prompt bounds read-only: " .. s)
 end
+check(not sys:find("The user's own rules", 1, true), "no policy section without config.auto.policy")
+
+-- config.auto.policy: the user's rules go before the reply format
+harner.config.auto.policy = "Launching the Cursor CLI is allowed."
+local sp = auto.system_prompt()
+local pi, ri = sp:find("- Launching the Cursor CLI is allowed.", 1, true), sp:find("Reply with at most", 1, true)
+check(pi and ri and pi < ri, "string policy added before the reply line")
+check(vim.trim(sp):match("`ASK: <short reason>`%.$"), "reply format stays last")
+harner.config.auto.policy = { "rule one", "  ", 3, "rule two" }
+sp = auto.system_prompt()
+check(sp:find("- rule one\n- rule two", 1, true), "list policy, blanks and non-strings skipped")
+harner.config.auto.policy = { "" }
+check(not auto.system_prompt():find("own rules", 1, true), "empty policy adds nothing")
+harner.config.auto.policy = "Cursor reviews are fine."
+reply("ALLOW")
+call("bash", { command = "echo policy | tr p P" })
+check(table.concat(vim.fn.readfile(dir .. "/argv"), "\n"):find("Cursor reviews are fine.", 1, true), "classifier argv carries the policy")
+harner.config.auto.policy = nil
 
 -- parse: the verdict is the last non-empty line
 local function parsed(s) return { auto.parse(s) } end

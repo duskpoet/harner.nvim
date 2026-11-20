@@ -101,8 +101,13 @@ M.config = {
 	-- files that run code when loaded (.nvim.lua, .envrc, ...), which always
 	-- ask. `confirm = true` asks for every write while auto mode is off.
 	-- edit_file never asks: it changes the buffer, unsaved and undoable.
+	-- `allow` lists directories (`~` expanded) whose files count as project
+	-- files even outside the cwd or under .claude/, e.g. a skill's data dir
+	-- `~/.claude/skills/pr-review/reviews`. Files that run code when loaded,
+	-- SKILL.md and anything under .git/ still ask.
 	write_file = {
 		confirm = false,
+		allow = {}, ---@type string[]
 	},
 	-- the bash tool: shell commands Claude may run in the working directory.
 	-- Off unless enabled. `confirm` asks before each command unless it starts
@@ -134,6 +139,9 @@ M.config = {
 		allow = {}, ---@type string[] extra bash prefixes (whole words, no shell operators)
 		model = "haiku",
 		timeout = 15, -- seconds for the classifier; on timeout the user is asked
+		-- your own rules for the classifier, added to its system prompt, e.g.
+		-- "Launching the Cursor CLI (`agent -p --mode ask`) to review a diff is allowed."
+		policy = nil, ---@type string|string[]|nil
 	},
 	-- log of what auto mode and the user decided (:HarnerDecisions summarises it)
 	decisions = {

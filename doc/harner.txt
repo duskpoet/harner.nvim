@@ -246,6 +246,9 @@ allow-lists and `a` grants still apply first. Beyond them:
   `.nvim.lua`, `.nvimrc`, `.exrc`, `.lazy.lua`, `.envrc`, a `.git` file,
   `hooks/` and `config` under `.git/`, everything under a `.claude/` dir
   except memory notes in `projects/<x>/memory/`, and `~/.claude.json`.
+  Directories in `write_file.allow` (e.g. `~/.claude/skills/x/reviews`)
+  count as project files, except `SKILL.md`, `CLAUDE.md`, `settings*.json`,
+  `.mcp.json`, `hooks.json`, files that run code, and anything in `.git/`.
 - A built-in list of read-only shell commands runs without asking
   (`git status|log|diff|show|blame`, read-only `git branch`, `ls`, `pwd`,
   `rg`, and `cat|head|tail|wc` on paths inside the working directory), plus
@@ -257,6 +260,9 @@ allow-lists and `a` grants still apply first. Beyond them:
   description and your latest message. It either lets the call run or
   opens the normal confirm with its reason under the command. It never
   refuses on its own; an error or a timeout (`auto.timeout`) asks you.
+  `auto.policy` (string or list) adds your own rules to its prompt, e.g.
+  "Launching the Cursor CLI (agent -p --mode ask) to review a diff is
+  allowed."; the rest of the command is still judged by the defaults.
 - The save/drop question over your own unsaved changes always asks.
 
 Calls that ran unasked are marked in the transcript, e.g.
@@ -266,7 +272,8 @@ Decision log ~
                                                             *harner-decisions*
 Every decision (rule, classifier, or your answer to a confirm) is appended
 to `decisions.path`. |:HarnerDecisions| summarises it, so you can see what
-still asks and add `auto.allow` entries for it.
+still asks and add `auto.allow`, `auto.policy` or `write_file.allow`
+entries for it.
 
 ==============================================================================
 8. SECURITY                                                  *harner-security*
@@ -342,6 +349,8 @@ Defaults: >lua
       write_file = {
         confirm = false,      -- true: ask before every disk write (auto
                               -- mode off)
+        allow = {},           -- dirs written like project files (not
+                              -- SKILL.md, settings, .git/)
       },
       bash = {
         enabled = false,      -- opt-in shell tool
@@ -356,6 +365,7 @@ Defaults: >lua
         allow = {},           -- extra bash prefixes that run without asking
         model = "haiku",      -- classifier model
         timeout = 15,         -- classifier seconds before asking instead
+        policy = nil,         -- your rules for the classifier (string/list)
       },
       persist = {             -- chats saved per project (cwd)
         enabled = true,
