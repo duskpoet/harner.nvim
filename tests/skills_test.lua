@@ -1,6 +1,22 @@
 -- /skill completion: frontmatter parsing, the disk scan (user, project,
 -- plugins), names learned from the init event, and the menu opening in the
 -- popup only at the start of the prompt.
+
+-- nvim 0.10 segfaults drawing the completion menu under `nvim -l` (the script
+-- runs before the screen is set up); the same script run by `-c luafile` is
+-- fine, so on 0.10 re-run this file that way and pass on its output and exit code
+-- (HARNER_SKILLS_CHILD marks the child: `arg` is set under luafile too)
+if vim.fn.has("nvim-0.11") == 0 and not vim.env.HARNER_SKILLS_CHILD then
+	local self = debug.getinfo(1, "S").source:sub(2)
+	local cmd = { vim.v.progpath, "--headless", "-u", "NONE", "-c", "luafile " .. vim.fn.fnameescape(self) }
+	local r = vim.system(cmd, { env = { HARNER_SKILLS_CHILD = "1" }, timeout = 60000 }):wait()
+	io.stderr:write(r.stderr or "")
+	if r.code ~= 0 or r.signal ~= 0 then
+		io.stderr:write(("skills_test child failed (code %d, signal %d)\n"):format(r.code, r.signal))
+	end
+	os.exit((r.code == 0 and r.signal == 0) and 0 or 1)
+end
+
 local t = dofile(vim.fs.dirname(debug.getinfo(1, "S").source:sub(2)) .. "/helper.lua")
 local check = t.check
 

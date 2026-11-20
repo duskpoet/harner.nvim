@@ -161,7 +161,10 @@ All modules live in `lua/harner/`:
   only map with `complete = false`; completeopt is buffer-local `menuone,noinsert,popup` on 0.11+,
   swapped globally and restored on CompleteDone/InsertLeave on 0.10.
   TextChangedI does not fire inside `feedkeys(…, "x")`, so skills_test calls
-  `trigger()` through `<Cmd>`.
+  `trigger()` through `<Cmd>`. nvim 0.10 segfaults drawing the popup menu
+  under `nvim -l` (fine under `-c luafile`), so on 0.10 skills_test re-runs
+  itself via `luafile` with `HARNER_SKILLS_CHILD=1` (`arg` is set there too,
+  so the env var is what stops the recursion).
 - `runner.lua` — builds argv, feeds the prompt on stdin, parses NDJSON. Text
   comes from `stream_event.content_block_delta` (`text_delta`), tool calls from
   `content_block_start` with a `tool_use` block (`on_tool(name)`); the call's
