@@ -123,6 +123,14 @@ closes and keeps the text as a draft for the next open. Sending while Claude
 is still answering queues the message; it goes out when the current reply
 ends (the winbar shows `N queued`).
 
+**Skills.** Start a message with `/` (in the popup or the chat input) and a
+menu lists your skills and slash commands with their descriptions: user and
+project `.claude/skills` / `.claude/commands`, installed plugins
+(`plugin:name`), and after the first reply everything Claude itself reports
+for the project (built-ins included). `<Tab>` fills in the highlighted entry
+and then moves down, `<S-Tab>` moves up, `<CR>` accepts.
+`prompt.complete = false` turns it off.
+
 **The chat split.** Everything below the last `────` line is your next
 message: `<CR>` in normal mode or `<C-s>` in insert mode sends it, `<C-c>`
 cancels a run. `gf` on a URL or a `path/file.lua:12-20` reference opens it.
@@ -338,6 +346,7 @@ require("harner").setup({
     max_height = 10,
     border = "rounded",
     open_chat = true,     -- open the chat split (unfocused) when sending from the popup
+    complete = true,      -- menu of /skills when the input starts with `/`
   },
 })
 ```
@@ -515,6 +524,7 @@ nvim --headless -u NONE -l tests/runner_test.lua   # stream parsing against a fa
 nvim --headless -u NONE -l tests/term_test.lua     # terminal status against a fake agtermctl
 nvim --headless -u NONE -l tests/notify_test.lua   # notification escapes per terminal, focus gate
 nvim --headless -u NONE -l tests/page_test.lua     # show_page: overlay per kind, fallbacks, refusals
+nvim --headless -u NONE -l tests/skills_test.lua   # /skill completion: scan, init names, menu
 ```
 
 A failing test exits non-zero; CI (`.github/workflows/test.yml`) runs them on

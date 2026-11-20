@@ -141,6 +141,27 @@ All modules live in `lua/harner/`:
   `selection_ref()` / `ref_line(ref)` build the selection reference;
   `open({ ref = ... })` attaches one (shown in the title, appended on send,
   dropped on close, not part of the kept draft).
+- `skills.lua` — `/skill` completion in the popup and the chat input
+  (`config.prompt.complete`). `attach(buf, input_start, on_cr)` hooks
+  TextChangedI → `trigger()`, which calls `vim.fn.complete()` when everything
+  from `input_start()` (popup: 1; chat: separator + 1, nil while a run
+  streams) to the cursor is `/<partial>` (no other text: Claude only treats a
+  leading `/` as a skill). Names = disk `scan(cwd)` (project `.claude` dirs
+  from cwd up to `$HOME`, nearest wins, then `$CLAUDE_CONFIG_DIR` or
+  `~/.claude`, then `plugins/installed_plugins.json` install paths as
+  `plugin:name` (user scope, or a `projectPath` at or above cwd); `skills/*/SKILL.md` minus `user-invocable: false`,
+  `commands/**/*.md`; descriptions from frontmatter, cached 5 s) merged with
+  what `learn()` kept from the runner's `system/init` event (`skills`,
+  `slash_commands`, per cwd, memory only). While its menu is open (mapped in
+  `trigger()`, removed on CompleteDone/InsertLeave, so the user's own insert
+  maps work otherwise) insert `<Tab>`/`<S-Tab>` move (the first `<Tab>`
+  inserts the pre-selected first item via `<C-n><C-p>`, since noinsert
+  selects without inserting) and `<CR>` accepts; `on_cr` is the buffer's
+  `<CR>` the rest of the time (the popup's send; none in the chat), and the
+  only map with `complete = false`; completeopt is buffer-local `menuone,noinsert,popup` on 0.11+,
+  swapped globally and restored on CompleteDone/InsertLeave on 0.10.
+  TextChangedI does not fire inside `feedkeys(…, "x")`, so skills_test calls
+  `trigger()` through `<Cmd>`.
 - `runner.lua` — builds argv, feeds the prompt on stdin, parses NDJSON. Text
   comes from `stream_event.content_block_delta` (`text_delta`), tool calls from
   `content_block_start` with a `tool_use` block (`on_tool(name)`); the call's

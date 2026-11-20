@@ -133,6 +133,15 @@ text as a draft for the next open. Sending while Claude is still answering
 queues the message; it goes out when the current reply ends (the winbar
 shows `N queued`).
 
+Skills ~
+                                                                *harner-skills*
+Start a message with `/` (popup or chat input) and a menu lists your skills
+and slash commands: user and project `.claude/skills` / `.claude/commands`,
+installed plugins (`plugin:name`), and after the first reply everything
+Claude reports for the project. <Tab> fills in the highlighted entry, then
+moves down; <S-Tab> moves up, <CR> accepts.
+`prompt.complete = false` turns it off.
+
 The chat split ~
                                                                 *harner-split*
 Everything below the last `────` line is your next message: <CR> in normal
@@ -373,6 +382,7 @@ Defaults: >lua
         max_height = 10,
         border = "rounded",
         open_chat = true,     -- open the chat split when sending
+        complete = true,      -- menu of /skills when input starts with `/`
       },
     })
 <

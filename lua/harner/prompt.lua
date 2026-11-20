@@ -197,7 +197,10 @@ function M.open(opts)
 	local function map(mode, lhs, rhs, desc)
 		vim.keymap.set(mode, lhs, rhs, { buffer = buf, desc = desc, nowait = true })
 	end
-	map("i", "<CR>", submit, "harner: send")
+	-- insert-mode <CR> sends unless the skill menu is open (then it accepts)
+	require("harner.skills").attach(buf, function()
+		return 1
+	end, submit)
 	map("n", "<CR>", submit, "harner: send")
 	map("i", "<S-CR>", "<CR>", "harner: newline")
 	map("i", "<C-CR>", "<CR>", "harner: newline")

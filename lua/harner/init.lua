@@ -164,6 +164,9 @@ M.config = {
 		max_height = 10,
 		border = "rounded",
 		open_chat = true, -- open the chat split (unfocused) when sending from the popup
+		-- menu of /skills and /commands when the input starts with `/`
+		-- (popup and chat input; <Tab>/<S-Tab> move, <CR> accepts)
+		complete = true,
 	},
 }
 

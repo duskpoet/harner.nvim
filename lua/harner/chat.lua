@@ -696,6 +696,14 @@ attach_buf = function(chat)
 	map("i", "<C-s>", send, "harner: send")
 	map("n", "<C-c>", cancel, "harner: cancel")
 	map("i", "<C-c>", cancel, "harner: cancel")
+	-- `/skill` completion at the start of the input (none while a run streams)
+	require("harner.skills").attach(buf, function()
+		if chat.run then
+			return nil
+		end
+		local sep = last_sep_index(buf)
+		return sep and sep + 1 or 1
+	end)
 
 	local render = require("harner.render")
 	if render.enabled() then

@@ -120,7 +120,10 @@ function M.start(opts)
 	end
 
 	local function handle_event(ev)
-		if ev.type == "stream_event" and ev.event then
+		if ev.type == "system" and ev.subtype == "init" then
+			-- what claude resolved for this cwd: feeds /skill completion
+			require("harner.skills").learn(opts.cwd, ev)
+		elseif ev.type == "stream_event" and ev.event then
 			got_stream = true
 			local e = ev.event
 			-- the prompt of a top-level API call is what the session's context holds now
